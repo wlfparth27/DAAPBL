@@ -1,0 +1,3 @@
+crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status
+CR-TRAP-01,"Lightweight Radio (Greedy Bait)",Shelter,1.0,2.0,2026-11-16T10:00:00Z,0,READY
+CR-TRAP-02,"Full Vehicle Medical ICU Container",Medical,100.0,100.0,2026-11-16T10:05:00Z,1,READY

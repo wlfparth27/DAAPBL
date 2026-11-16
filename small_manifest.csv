@@ -1,0 +1,6 @@
+crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status
+CR-101,"Trauma Surgical Kit",Medical,2.0,40.0,2026-11-16T08:00:00Z,1,READY
+CR-102,"Water Purification Unit",Water,5.0,30.0,2026-11-16T08:05:00Z,0,READY
+CR-103,"Field Generator Module",Shelter,10.0,50.0,2026-11-16T08:10:00Z,0,READY
+CR-104,"High-Energy Ration Pallet",Food,5.0,10.0,2026-11-16T08:15:00Z,0,READY
+CR-105,"Pediatric Antibiotic Pack",Medical,3.0,12.0,2026-11-16T08:20:00Z,1,READY

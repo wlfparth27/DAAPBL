@@ -1,0 +1,5 @@
+crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status
+CR-INF-01,"Heavy Generator 20kVA",Shelter,65.0,120.0,2026-11-16T08:00:00Z,0,READY
+CR-INF-02,"Industrial Water Cistern",Water,95.0,140.0,2026-11-16T08:10:00Z,0,READY
+CR-INF-03,"Mobile X-Ray Station",Medical,115.0,200.0,2026-11-16T08:20:00Z,1,READY
+CR-INF-04,"Bulky Grain Container",Food,85.0,90.0,2026-11-16T08:30:00Z,0,READY

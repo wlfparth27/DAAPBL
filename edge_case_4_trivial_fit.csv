@@ -1,0 +1,7 @@
+crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status
+CR-FIT-01,"First Aid Module",Medical,5.0,35.0,2026-11-16T09:00:00Z,1,READY
+CR-FIT-02,"Purification Tablets",Water,4.0,28.0,2026-11-16T09:05:00Z,0,READY
+CR-FIT-03,"Emergency Rations",Food,8.0,40.0,2026-11-16T09:10:00Z,0,READY
+CR-FIT-04,"Light Sleeping Bags",Shelter,7.0,25.0,2026-11-16T09:15:00Z,0,READY
+CR-FIT-05,"Infant Formula",Food,6.0,30.0,2026-11-16T09:20:00Z,0,READY
+CR-FIT-06,"Antibiotic Vials",Medical,6.0,45.0,2026-11-16T09:25:00Z,1,READY

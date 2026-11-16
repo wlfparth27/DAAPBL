@@ -1,0 +1,14 @@
+crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status
+CR-D01,"Valid Surgical Kit",Medical,10.0,50.0,2026-11-16T08:00:00Z,1,READY
+CR-D02,"Missing Weight Crate",Water,,45.0,2026-11-16T08:05:00Z,0,READY
+CR-D03,"Missing Priority Crate",Food,12.0,,2026-11-16T08:10:00Z,0,READY
+CR-D04,"Negative Weight Box",Medical,-5.0,30.0,2026-11-16T08:15:00Z,1,READY
+CR-D05,"Zero Weight Cargo",Shelter,0.0,25.0,2026-11-16T08:20:00Z,0,READY
+CR-D06,"Zero Utility Waste",Food,15.0,0.0,2026-11-16T08:25:00Z,0,READY
+CR-D07,"Crushed Water Bottles",Water,20.0,40.0,2026-11-16T08:30:00Z,0,DAMAGED
+CR-D08,"Contaminated Antibiotics",Medical,8.0,60.0,2026-11-16T08:35:00Z,1,QUARANTINED
+CR-D09,"Hazardous Flammable Fuel",Petroleum,30.0,70.0,2026-11-16T08:40:00Z,0,READY
+CR-D10,"Field Tent (Old Initial Draft)",Shelter,18.0,40.0,2026-11-16T07:30:00Z,0,READY
+CR-D10,"Field Tent (Updated Verified Weight)",Shelter,16.0,48.0,2026-11-16T09:45:00Z,0,READY
+CR-D01,"Valid Surgical Kit Duplicate",Medical,10.0,50.0,2026-11-16T07:15:00Z,1,READY
+CR-D11,"Emergency Rations Pack",Food,14.0,55.0,2026-11-16T08:50:00Z,0,READY

@@ -1,0 +1,41 @@
+crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status
+CR-M001,"Surgical Field Kit",Medical,37.9,59.9,2026-11-16T08:07:00Z,0,READY
+CR-M002,"Chlorine Tablets Crate",Water,9.2,105.3,2026-11-16T08:14:00Z,0,READY
+CR-M003,"Emergency Bladder 50L",Water,19.9,154.5,2026-11-16T08:21:00Z,0,READY
+CR-M004,"Surgical Field Kit",Medical,26.4,68.6,2026-11-16T08:28:00Z,1,READY
+CR-M005,"Winterized Family Tent",Shelter,11.2,20.2,2026-11-16T08:35:00Z,0,READY
+CR-M006,"Filter Cartridges",Water,39.8,124.8,2026-11-16T08:42:00Z,0,READY
+CR-M007,"Surgical Field Kit",Medical,10.6,138.6,2026-11-16T08:49:00Z,0,READY
+CR-M008,"Filter Cartridges",Water,14.4,100.5,2026-11-16T08:56:00Z,0,READY
+CR-M009,"Thermal Blanket Bale",Shelter,21.3,128.5,2026-11-16T08:03:00Z,0,READY
+CR-M010,"Chlorine Tablets Crate",Water,14.4,22.4,2026-11-16T09:10:00Z,0,READY
+CR-M011,"High-Energy Biscuits",Food,33.3,128.3,2026-11-16T09:17:00Z,0,READY
+CR-M012,"Field Generator 2kW",Shelter,23.1,23.3,2026-11-16T09:24:00Z,0,READY
+CR-M013,"Structural Tarpaulins",Shelter,34.9,52.3,2026-11-16T09:31:00Z,0,READY
+CR-M014,"Dehydrated Meal Crate",Food,16.4,28.2,2026-11-16T09:38:00Z,0,READY
+CR-M015,"Canned Protein Pallet",Food,32.0,123.7,2026-11-16T09:45:00Z,0,READY
+CR-M016,"Antibiotic Crate",Medical,40.5,156.0,2026-11-16T09:52:00Z,0,READY
+CR-M017,"Dehydrated Meal Crate",Food,44.1,22.0,2026-11-16T09:59:00Z,0,READY
+CR-M018,"Infant Nutrition Pack",Food,44.5,78.3,2026-11-16T09:06:00Z,0,READY
+CR-M019,"Antibiotic Crate",Medical,39.4,111.6,2026-11-16T09:13:00Z,1,READY
+CR-M020,"Solar Power Station",Shelter,22.4,121.5,2026-11-16T10:20:00Z,0,READY
+CR-M021,"Solar Power Station",Shelter,13.5,95.0,2026-11-16T10:27:00Z,0,READY
+CR-M022,"Trauma Kit",Medical,46.3,63.4,2026-11-16T10:34:00Z,1,READY
+CR-M023,"Desalination Pump",Water,30.4,119.5,2026-11-16T10:41:00Z,0,READY
+CR-M024,"Desalination Pump",Water,27.9,56.2,2026-11-16T10:48:00Z,0,READY
+CR-M025,"Chlorine Tablets Crate",Water,41.6,19.1,2026-11-16T10:55:00Z,0,READY
+CR-M026,"MRE Ration Box",Food,19.5,142.4,2026-11-16T10:02:00Z,0,READY
+CR-M027,"Desalination Pump",Water,42.0,130.8,2026-11-16T10:09:00Z,0,READY
+CR-M028,"Chlorine Tablets Crate",Water,28.8,123.9,2026-11-16T10:16:00Z,0,READY
+CR-M029,"Trauma Kit",Medical,46.0,156.8,2026-11-16T10:23:00Z,1,READY
+CR-M030,"Insulin Cooler",Medical,28.2,123.7,2026-11-16T11:30:00Z,1,READY
+CR-M031,"Field Generator 2kW",Shelter,36.6,29.0,2026-11-16T11:37:00Z,0,READY
+CR-M032,"Infant Nutrition Pack",Food,6.7,122.7,2026-11-16T11:44:00Z,0,READY
+CR-M033,"Surgical Field Kit",Medical,35.5,11.9,2026-11-16T11:51:00Z,0,READY
+CR-M034,"Infant Nutrition Pack",Food,33.3,159.9,2026-11-16T11:58:00Z,0,READY
+CR-M035,"Canned Protein Pallet",Food,41.7,14.5,2026-11-16T11:05:00Z,0,READY
+CR-M036,"Canned Protein Pallet",Food,13.9,23.2,2026-11-16T11:12:00Z,0,READY
+CR-M037,"Surgical Field Kit",Medical,10.4,152.3,2026-11-16T11:19:00Z,1,READY
+CR-M038,"Solar Power Station",Shelter,38.5,102.2,2026-11-16T11:26:00Z,0,READY
+CR-M039,"Emergency Bladder 50L",Water,41.6,151.8,2026-11-16T11:33:00Z,0,READY
+CR-M040,"Blood Plasma Box",Medical,41.1,55.3,2026-11-16T12:40:00Z,0,READY

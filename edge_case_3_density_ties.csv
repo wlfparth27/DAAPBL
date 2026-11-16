@@ -1,0 +1,6 @@
+crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status
+CR-TIE-01,"Trauma Kit A",Medical,10.0,50.0,2026-11-16T08:00:00Z,1,READY
+CR-TIE-02,"Water Filter Pack",Water,4.0,20.0,2026-11-16T08:05:00Z,0,READY
+CR-TIE-03,"Shelter Tarps",Shelter,6.0,30.0,2026-11-16T08:10:00Z,0,READY
+CR-TIE-04,"High Energy Food",Food,2.0,10.0,2026-11-16T08:15:00Z,0,READY
+CR-TIE-05,"Sanitation Kit",Water,8.0,40.0,2026-11-16T08:20:00Z,0,READY

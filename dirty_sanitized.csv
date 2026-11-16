@@ -1,0 +1,4 @@
+crate_id,description,category,weight_kg,priority_score,density,arrival_timestamp,fragility_constraint,status
+CR-D01,"Valid Surgical Kit",Medical,10.00,50.00,5.0000,2026-11-16T08:00:00Z,1,READY
+CR-D10,"Field Tent (Updated Verified Weight)",Shelter,16.00,48.00,3.0000,2026-11-16T09:45:00Z,0,READY
+CR-D11,"Emergency Rations Pack",Food,14.00,55.00,3.9286,2026-11-16T08:50:00Z,0,READY
