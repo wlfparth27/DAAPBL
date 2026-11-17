@@ -25,6 +25,6 @@ Example:
     }
     baseline_solution_free(&dp_result);
 
-The input must be the clean manifest produced by sanitize_manifest. The solvers defensively skip non-READY entries and reject malformed READY records and duplicate READY IDs. DP uses exact fixed-point units inferred from up to six decimal places; it refuses silent rounding and has a 256 MiB allocation guard. Greedy uses the original finite double values and does not discretize weights.
+The input must be the clean manifest produced by sanitize_manifest. The solvers defensively skip non-READY entries and reject malformed READY records and duplicate READY IDs. DP uses exact fixed-point units inferred from up to six decimal places; it refuses silent rounding and has a 256 MiB allocation guard. Greedy uses the same exact integer-unit capacity comparison when the input is representable at up to six decimal places; for more extreme precision it falls back to conservative long-double feasibility checks.
 
 BASELINE_OK with zero selected crates is a valid result (for example, empty input, zero capacity, or all crates individually infeasible). Always check the returned status and call baseline_solution_free when finished and before reusing the same result object; initialize result objects as {0} before their first call.

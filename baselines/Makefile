@@ -5,6 +5,7 @@ CPPFLAGS += -I.. -I.
 LDLIBS += -lm
 BUILD_DIR := build
 LIB_OBJECTS := $(BUILD_DIR)/baseline_common.o $(BUILD_DIR)/dp_solver.o $(BUILD_DIR)/greedy_solver.o
+TEST_BINS := $(BUILD_DIR)/test_baselines $(BUILD_DIR)/test_decimal_boundary
 
 .PHONY: all library test sanitize clean
 
@@ -30,8 +31,12 @@ $(BUILD_DIR)/librelief_baselines.a: $(LIB_OBJECTS)
 $(BUILD_DIR)/test_baselines: ../tests/test_baselines.c $(LIB_OBJECTS) | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ $(LDFLAGS) $(LDLIBS) -o $@
 
-test: $(BUILD_DIR)/test_baselines
+$(BUILD_DIR)/test_decimal_boundary: ../tests/test_decimal_boundary.c $(LIB_OBJECTS) | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ $(LDFLAGS) $(LDLIBS) -o $@
+
+test: $(TEST_BINS)
 	./$(BUILD_DIR)/test_baselines
+	./$(BUILD_DIR)/test_decimal_boundary
 
 sanitize:
 	$(MAKE) clean

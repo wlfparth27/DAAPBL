@@ -1,0 +1,23 @@
+Parth Baselines Validation
+==========================
+
+Build:
+  make -C baselines clean all test
+
+Result:
+  PASS - C11 compilation with -Wall -Wextra -Wpedantic
+  PASS - 430/430 checks across the baseline and decimal-boundary test executables
+  PASS - 200 deterministic randomized DP comparisons against exhaustive 0/1 enumeration
+  PASS - Greedy feasibility checked on the same randomized cases
+  PASS - DP and Greedy decimal-capacity boundary (.1 kg + .2 kg <= .3 kg)
+  PASS - AddressSanitizer and UndefinedBehaviorSanitizer test run
+
+Coverage:
+  Hand-verified small manifest; known Greedy counterexample; empty input; zero capacity;
+  infeasible crates; non-READY filtering; equal-density ties; deterministic output;
+  negative, NaN, and infinite numeric inputs; duplicate IDs; unsupported DP precision;
+  resource-limit handling; extreme density ratios; and randomized exact-oracle comparisons.
+
+Scope:
+  New paths only. No pre-existing repository source, data, video, report, README,
+  schema, sanitizer, dataset generator, or teammate-owned test was modified.

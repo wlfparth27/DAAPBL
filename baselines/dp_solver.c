@@ -34,7 +34,8 @@ static int convert_one(double value, uint64_t scale, uint64_t *out) {
     long double nearest = roundl(scaled);
     long double tolerance = 4.0L * (long double)DBL_EPSILON * fmaxl(1.0L, fabsl(scaled));
     if (fabsl(scaled - nearest) > tolerance) return 0;
-    if (nearest < 0.0L || nearest > (long double)UINT64_MAX) return 0;
+    if ((value > 0.0 && nearest == 0.0L) || nearest < 0.0L ||
+        nearest > (long double)UINT64_MAX) return 0;
 
     *out = (uint64_t)nearest;
     return 1;
@@ -119,6 +120,11 @@ BaselineStatus dp_solve(
     if (item_count == 0) {
         free(items);
         return BASELINE_OK;
+    }
+
+    if (item_count == SIZE_MAX) {
+        free(items);
+        return BASELINE_RESOURCE_LIMIT;
     }
 
     double *weight_values = (double *)malloc((item_count + 1u) * sizeof(*weight_values));
@@ -255,27 +261,30 @@ BaselineStatus dp_solve(
 
     size_t selected_count = 0;
     size_t remaining_capacity = (size_t)capacity_units;
+    uint64_t selected_weight_units = 0;
+    uint64_t selected_priority_units = 0;
     for (size_t i = item_count; i > 0; --i) {
         size_t row = i - 1u;
         size_t bit_index = row * width + remaining_capacity;
         if (get_choice_bit(choices, bit_index)) {
             selected[selected_count++] = items[row].original_index;
-            if (weight_units[row] > (uint64_t)remaining_capacity) {
+            if (weight_units[row] > (uint64_t)remaining_capacity ||
+                weight_units[row] > UINT64_MAX - selected_weight_units ||
+                priority_units[row] > UINT64_MAX - selected_priority_units) {
                 free(selected); free(items); free(weight_units); free(priority_units);
                 free(choices); free(row_a); free(row_b);
                 return BASELINE_NUMERIC_RANGE;
             }
             remaining_capacity -= (size_t)weight_units[row];
+            selected_weight_units += weight_units[row];
+            selected_priority_units += priority_units[row];
         }
     }
     qsort(selected, selected_count, sizeof(*selected), compare_size_t);
 
-    long double total_weight = 0.0L;
-    long double total_priority = 0.0L;
-    for (size_t i = 0; i < selected_count; ++i) {
-        total_weight += (long double)crates[selected[i]].weight_kg;
-        total_priority += (long double)crates[selected[i]].priority_score;
-    }
+    /* Report the exact scaled model totals, not a second floating-point re-sum. */
+    long double total_weight = (long double)selected_weight_units / (long double)weight_scale;
+    long double total_priority = (long double)selected_priority_units / (long double)priority_scale;
     if (!isfinite(total_weight) || !isfinite(total_priority) ||
         total_weight > (long double)DBL_MAX || total_priority > (long double)DBL_MAX) {
         free(selected); free(items); free(weight_units); free(priority_units);

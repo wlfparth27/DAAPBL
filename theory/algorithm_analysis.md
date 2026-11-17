@@ -2,7 +2,7 @@
 
 ## Mathematical model
 
-For each READY relief crate \(i\), let \(w_i > 0\) be its weight in kilograms and \(v_i > 0\) its humanitarian priority score. Let \(W \geq 0\) be the vehicle payload capacity. A crate is indivisible, so \(x_i\) is either zero or one:
+For each READY relief crate \`i\`, let \`w_i > 0\` be its weight in kilograms and \`v_i > 0\` its humanitarian priority score. Let \`W >= 0\` be the vehicle payload capacity. A crate is indivisible, so \`x_i\` is either zero or one:
 
 \[
 \max \sum_{i=1}^{n} v_i x_i
@@ -54,7 +54,7 @@ For deterministic density ties, the implementation prefers lower weight, then le
 - **Space:** \`O(n)\` for candidates and selected indices.
 - **Guarantee:** feasible output, but no general optimality guarantee for 0/1 Knapsack.
 
-The ratio comparator represents each positive density as a normalized mantissa and binary exponent, avoiding overflow from directly dividing extreme finite doubles. The heuristic does not mutate the manifest.
+The ratio comparator represents each positive density as a normalized mantissa and binary exponent, avoiding overflow from directly dividing extreme finite doubles. For ordinary manifest weights with at most six decimal places, feasibility uses exact integer-unit comparisons. For weights outside that fixed-point range, the solver falls back to conservative \`long double\` comparisons. The heuristic does not mutate the manifest.
 
 ## 3. Input, numeric, and edge-case policy
 
