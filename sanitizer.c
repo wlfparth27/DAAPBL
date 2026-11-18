@@ -251,6 +251,7 @@ int deduplicate_manifest(
             continue;
         }
 
+        ReliefCrate rejected_copy;
         ReliefCrate *rejected = candidate;
         const char *reason = "Clean manifest capacity exceeded";
         const char *action = "Excluded because clean manifest is full";
@@ -259,7 +260,8 @@ int deduplicate_manifest(
             int cmp = compare_iso_timestamps(candidate->arrival_timestamp,
                                              clean_crates[existing].arrival_timestamp);
             if (cmp > 0) {
-                rejected = &clean_crates[existing];
+                rejected_copy = clean_crates[existing];
+                rejected = &rejected_copy;
                 reason = "Duplicate crate_id superseded by newer timestamp";
                 action = "Replaced by newer manifest record";
                 clean_crates[existing] = *candidate;
