@@ -61,7 +61,7 @@ Streamlit prints the local URL (normally \`http://localhost:8501\`).
 With a C compiler and GNU Make:
 
 \`\`\`bash
-make -C baselines test
+make test
 \`\`\`
 
 ## Data and solver limitations
