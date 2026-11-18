@@ -85,6 +85,17 @@ void test_dirty_manifest_sanitization(void) {
     TEST_ASSERT(fclean != NULL, "Clean output CSV file successfully written");
     if (fclean) fclose(fclean);
 
+    /* The sanitizer's own nine-column clean export must be valid input again. */
+    if (fclean) {
+        ReliefCrate roundtrip[64];
+        int roundtrip_count = 0;
+        ManifestStats roundtrip_stats;
+        int roundtrip_res = sanitize_manifest(clean_path, NULL, NULL, roundtrip, 64,
+                                              &roundtrip_count, &roundtrip_stats);
+        TEST_ASSERT(roundtrip_res == 0, "Re-imported clean CSV without parser error");
+        TEST_ASSERT(roundtrip_count == clean_count, "Clean CSV round-trip preserved accepted crate count");
+    }
+
     /* Check that quarantine log was created and contains audit trail */
     FILE *fquar = fopen(quar_path, "r");
     TEST_ASSERT(fquar != NULL, "Quarantine audit log CSV successfully written");
