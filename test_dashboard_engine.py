@@ -6,6 +6,7 @@ from dashboard_engine import (
     solve_brute_force,
     solve_dynamic_programming,
     solve_greedy,
+    run_solver_suite,
     parse_manifest,
 )
 
@@ -76,6 +77,26 @@ class ExactSolverRegressionTests(unittest.TestCase):
         result = solve_dynamic_programming(items, 2.0)
         self.assertFalse(result.optimal)
         self.assertIn("signed 64-bit", result.status)
+
+
+    def test_dashboard_solver_suite_runs_all_selected_algorithms(self):
+        items = [crate("A", 2.0, 10.0), crate("B", 3.0, 15.0), crate("C", 5.0, 25.0)]
+        progress_events = []
+        results = run_solver_suite(
+            items, 5.0,
+            ("Branch and Bound", "Dynamic Programming", "Greedy Density"),
+            lambda *event: progress_events.append(event),
+            max_nodes=1000,
+        )
+        self.assertEqual([r.algorithm for r in results], [
+            "Branch and Bound", "Dynamic Programming", "Greedy Density"
+        ])
+        self.assertTrue(results[0].optimal, results[0].status)
+        self.assertTrue(results[1].optimal, results[1].status)
+        self.assertAlmostEqual(results[0].total_priority, 25.0)
+        self.assertAlmostEqual(results[1].total_priority, 25.0)
+        self.assertLessEqual(results[2].total_weight, 5.0)
+        self.assertTrue(progress_events)
 
 
 if __name__ == "__main__":
