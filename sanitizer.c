@@ -218,6 +218,85 @@ int parse_csv_line(const char *raw_line, int line_num, ReliefCrate *crate, char 
     return VALID_OK;
 }
 
+
+/* Public deduplication helper declared in sanitizer.h. Returns the clean count. */
+int deduplicate_manifest(
+    ReliefCrate *raw_crates,
+    int raw_count,
+    ReliefCrate *clean_crates,
+    int max_clean,
+    QuarantineRecord *quarantine_records,
+    int *quarantine_count,
+    int max_quarantine,
+    ManifestStats *stats
+) {
+    if ((raw_count > 0 && !raw_crates) || !clean_crates || !quarantine_count || !stats ||
+        raw_count < 0 || max_clean < 0 || max_quarantine < 0) {
+        return -1;
+    }
+
+    int clean_count = 0;
+    for (int i = 0; i < raw_count; i++) {
+        ReliefCrate *candidate = &raw_crates[i];
+        int existing = -1;
+        for (int j = 0; j < clean_count; j++) {
+            if (strcmp(clean_crates[j].crate_id, candidate->crate_id) == 0) {
+                existing = j;
+                break;
+            }
+        }
+
+        if (existing < 0 && clean_count < max_clean) {
+            clean_crates[clean_count++] = *candidate;
+            continue;
+        }
+
+        ReliefCrate *rejected = candidate;
+        const char *reason = "Clean manifest capacity exceeded";
+        const char *action = "Excluded because clean manifest is full";
+        if (existing >= 0) {
+            stats->duplicates_resolved++;
+            int cmp = compare_iso_timestamps(candidate->arrival_timestamp,
+                                             clean_crates[existing].arrival_timestamp);
+            if (cmp > 0) {
+                rejected = &clean_crates[existing];
+                reason = "Duplicate crate_id superseded by newer timestamp";
+                action = "Replaced by newer manifest record";
+                clean_crates[existing] = *candidate;
+            } else {
+                reason = "Duplicate crate_id; older or equal timestamp";
+                action = "Ignored older duplicate record";
+            }
+        }
+        if (quarantine_records && *quarantine_count < max_quarantine) {
+            QuarantineRecord *record = &quarantine_records[(*quarantine_count)++];
+            memset(record, 0, sizeof(*record));
+            strncpy(record->crate_id, rejected->crate_id, MAX_ID_LEN - 1);
+            record->line_number = rejected->line_number;
+            snprintf(record->raw_record, sizeof(record->raw_record),
+                     "%s,%s,%s,%.6f,%.6f,%s,%d,%s",
+                     rejected->crate_id, rejected->description,
+                     category_to_string(rejected->category), rejected->weight_kg,
+                     rejected->priority_score, rejected->arrival_timestamp,
+                     rejected->fragility_constraint, status_to_string(rejected->status));
+            snprintf(record->rejection_reason, sizeof(record->rejection_reason), "%s", reason);
+            snprintf(record->action_taken, sizeof(record->action_taken), "%s", action);
+            snprintf(record->detected_timestamp, sizeof(record->detected_timestamp), "%s",
+                     candidate->arrival_timestamp);
+        }
+        stats->quarantined_count++;
+    }
+
+    stats->accepted_ready_count = clean_count;
+    stats->total_clean_weight = 0.0;
+    stats->total_clean_priority = 0.0;
+    for (int i = 0; i < clean_count; i++) {
+        stats->total_clean_weight += clean_crates[i].weight_kg;
+        stats->total_clean_priority += clean_crates[i].priority_score;
+    }
+    return clean_count;
+}
+
 int sanitize_manifest(
     const char *input_csv_path,
     const char *clean_output_path,
