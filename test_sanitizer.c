@@ -272,6 +272,9 @@ void test_non_finite_numeric_values(void) {
         "CR-INF,Invalid Priority,Medical,1.0,inf,2026-11-18T00:00:00Z,0,READY",
         3, &crate, error, sizeof(error));
     TEST_ASSERT(priority_result == ERR_INVALID_PRIORITY, "Infinite priority rejected");
+    TEST_ASSERT(compare_iso_timestamps("2026-11-18T08:00:00+02:00",
+                                       "2026-11-18T06:30:00Z") < 0,
+                 "ISO timestamps compared correctly across timezone offsets");
 }
 
 int main(void) {
