@@ -256,7 +256,7 @@ void test_non_finite_numeric_values(void) {
     ReliefCrate crate;
     char error[128] = {0};
     int quoted_result = parse_csv_line(
-        "CR-COMMA,\"Kit, with \"\"quotes\"\",Medical,1.0,2.0,2026-11-18T00:00:00Z,0,READY",
+        "CR-COMMA,\"Kit, with \"\"quotes\"\"\",Medical,1.0,2.0,2026-11-18T00:00:00Z,0,READY",
         2, &crate, error, sizeof(error));
     TEST_ASSERT(quoted_result == VALID_OK, "Quoted commas and escaped quotes parsed");
     TEST_ASSERT(strcmp(crate.description, "Kit, with \"quotes\"") == 0,
