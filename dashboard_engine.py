@@ -538,3 +538,43 @@ def solve_brute_force(crates: list[Crate], capacity: float, max_items: int = 20)
         return SolverResult(algorithm="Brute Force Oracle", selected_indices=[], total_weight=0.0,
             total_priority=0.0, runtime_seconds=0.0, peak_traced_mb=0.0, work_count=0,
             optimal=False, status=f"Not run: {exc}")
+
+
+
+def run_solver_suite(
+    crates: list[Crate],
+    capacity: float,
+    algorithms: tuple[str, ...],
+    progress: Optional[Callable[[str, int, int, float, int], None]] = None,
+    max_nodes: int = 1_000_000,
+) -> list[SolverResult]:
+    """Run the selected dashboard solvers in the requested order.
+
+    The dashboard callback has a common five-argument contract. Adapt the
+    solver-specific progress callbacks here so the UI and engine stay aligned.
+    """
+    results: list[SolverResult] = []
+    for algorithm in algorithms:
+        if algorithm == "Branch and Bound":
+            callback = None
+            if progress:
+                callback = lambda current, maximum, incumbent, pruned: progress(
+                    algorithm, current, maximum, incumbent, pruned
+                )
+            results.append(solve_branch_and_bound(
+                crates, capacity, progress=callback, max_nodes=max_nodes
+            ))
+        elif algorithm == "Dynamic Programming":
+            callback = None
+            if progress:
+                callback = lambda current, maximum, operations: progress(
+                    algorithm, current, maximum, float(operations), 0
+                )
+            results.append(solve_dynamic_programming(
+                crates, capacity, progress=callback
+            ))
+        elif algorithm == "Greedy Density":
+            results.append(solve_greedy(crates, capacity))
+        else:
+            raise ValueError(f"Unknown solver requested: {algorithm}")
+    return results
