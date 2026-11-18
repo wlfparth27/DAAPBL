@@ -41,6 +41,7 @@ static int split_csv_line(char *line, char tokens[][MAX_LINE_LEN], int max_token
             if ((size_t)(dst - tokens[count]) < MAX_LINE_LEN - 1) *dst++ = *src;
             src++;
         }
+        if (in_quotes) return -1;
         *dst = '\0';
         trim_whitespace(tokens[count]);
         count++;
@@ -95,6 +96,10 @@ int parse_csv_line(const char *raw_line, int line_num, ReliefCrate *crate, char 
 
     char tokens[12][MAX_LINE_LEN];
     int token_count = split_csv_line(line_copy, tokens, 12);
+    if (token_count < 0) {
+        if (err_msg) snprintf(err_msg, err_buf_len, "Malformed CSV: unterminated quoted field");
+        return ERR_MALFORMED_ROW;
+    }
 
     /*
      * We support two standard layouts:
