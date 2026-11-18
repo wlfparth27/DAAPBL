@@ -171,8 +171,8 @@ int parse_csv_line(const char *raw_line, int line_num, ReliefCrate *crate, char 
         if (err_msg) snprintf(err_msg, err_buf_len, "Non-numeric weight value '%s'", tokens[idx_w]);
         return ERR_INVALID_WEIGHT;
     }
-    if (crate->weight_kg <= 0.0) {
-        if (err_msg) snprintf(err_msg, err_buf_len, "Negative or zero weight: %.2f kg", crate->weight_kg);
+    if (!isfinite(crate->weight_kg) || crate->weight_kg <= 0.0) {
+        if (err_msg) snprintf(err_msg, err_buf_len, "Weight must be finite and greater than zero");
         return ERR_INVALID_WEIGHT;
     }
 
@@ -186,8 +186,8 @@ int parse_csv_line(const char *raw_line, int line_num, ReliefCrate *crate, char 
         if (err_msg) snprintf(err_msg, err_buf_len, "Non-numeric priority value '%s'", tokens[idx_v]);
         return ERR_INVALID_PRIORITY;
     }
-    if (crate->priority_score <= 0.0) {
-        if (err_msg) snprintf(err_msg, err_buf_len, "Negative or zero priority: %.2f", crate->priority_score);
+    if (!isfinite(crate->priority_score) || crate->priority_score <= 0.0) {
+        if (err_msg) snprintf(err_msg, err_buf_len, "Priority must be finite and greater than zero");
         return ERR_INVALID_PRIORITY;
     }
 
