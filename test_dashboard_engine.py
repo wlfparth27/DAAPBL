@@ -6,6 +6,7 @@ from dashboard_engine import (
     solve_brute_force,
     solve_dynamic_programming,
     solve_greedy,
+    parse_manifest,
 )
 
 
@@ -57,6 +58,18 @@ class ExactSolverRegressionTests(unittest.TestCase):
         self.assertTrue(oracle.optimal, oracle.status)
         self.assertAlmostEqual(bnb.total_priority, oracle.total_priority, places=9)
         self.assertLessEqual(bnb.total_weight, 7.0)
+
+    def test_duplicate_timestamp_comparison_normalizes_utc_offsets(self):
+        manifest = (
+            "crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status\\n"
+            "DUP,Older UTC instant,Medical,1.0,10.0,2026-11-18T08:00:00+02:00,0,READY\\n"
+            "DUP,Newer UTC instant,Medical,1.0,20.0,2026-11-18T06:30:00Z,0,READY\\n"
+        )
+        accepted, _, report = parse_manifest(manifest)
+        self.assertEqual(len(accepted), 1)
+        self.assertEqual(accepted[0].priority_score, 20.0)
+        self.assertEqual(accepted[0].line_number, 3)
+        self.assertEqual(report.duplicates_resolved, 1)
 
     def test_dp_refuses_values_that_overflow_int64(self):
         items = [crate("A", 1.0, 5e18), crate("B", 1.0, 5e18)]
