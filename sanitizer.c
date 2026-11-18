@@ -1,15 +1,18 @@
 #include "sanitizer.h"
 #include <ctype.h>
+#include <math.h>
 
 /* Helper to strip leading and trailing whitespace/newlines/quotes */
 static void trim_whitespace(char *str) {
     if (!str) return;
     char *start = str;
-    while (*start && (isspace((unsigned char)*start) || *start == '"' || *start == '\'')) {
+    /* CSV quote delimiters are removed by split_csv_line(). Do not strip
+       quote characters here: they may be legitimate decoded field content. */
+    while (*start && isspace((unsigned char)*start)) {
         start++;
     }
     char *end = start + strlen(start);
-    while (end > start && (isspace((unsigned char)*(end - 1)) || *(end - 1) == '"' || *(end - 1) == '\'')) {
+    while (end > start && isspace((unsigned char)*(end - 1))) {
         end--;
     }
     *end = '\0';
@@ -21,28 +24,32 @@ static void trim_whitespace(char *str) {
 /* Helper to split CSV line into tokens safely (handling empty fields) */
 static int split_csv_line(char *line, char tokens[][MAX_LINE_LEN], int max_tokens) {
     int count = 0;
-    char *cur = line;
-    char *start = cur;
-
-    while (*cur && count < max_tokens) {
-        if (*cur == ',') {
-            *cur = '\0';
-            strncpy(tokens[count], start, MAX_LINE_LEN - 1);
-            tokens[count][MAX_LINE_LEN - 1] = '\0';
-            trim_whitespace(tokens[count]);
-            count++;
-            start = cur + 1;
+    char *src = line;
+    while (*src && count < max_tokens) {
+        char *dst = tokens[count];
+        int in_quotes = 0;
+        while (*src) {
+            if (*src == '"') {
+                if (in_quotes && src[1] == '"') {
+                    if ((size_t)(dst - tokens[count]) < MAX_LINE_LEN - 1) *dst++ = '"';
+                    src += 2;
+                    continue;
+                }
+                in_quotes = !in_quotes;
+                src++;
+                continue;
+            }
+            if (*src == ',' && !in_quotes) break;
+            if ((size_t)(dst - tokens[count]) < MAX_LINE_LEN - 1) *dst++ = *src;
+            src++;
         }
-        cur++;
-    }
-
-    if (count < max_tokens) {
-        strncpy(tokens[count], start, MAX_LINE_LEN - 1);
-        tokens[count][MAX_LINE_LEN - 1] = '\0';
+        if (in_quotes) return -1;
+        *dst = '\0';
         trim_whitespace(tokens[count]);
         count++;
+        if (*src == ',') src++;
+        else break;
     }
-
     return count;
 }
 
@@ -62,12 +69,12 @@ ValidationCode validate_crate_fields(const ReliefCrate *crate, char *reason_buf,
         return ERR_UNKNOWN_CATEGORY;
     }
 
-    if (crate->weight_kg <= 0.0) {
+    if (!isfinite(crate->weight_kg) || crate->weight_kg <= 0.0) {
         if (reason_buf) snprintf(reason_buf, buf_len, "Invalid non-positive weight (%.2f kg <= 0)", crate->weight_kg);
         return ERR_INVALID_WEIGHT;
     }
 
-    if (crate->priority_score <= 0.0) {
+    if (!isfinite(crate->priority_score) || crate->priority_score <= 0.0) {
         if (reason_buf) snprintf(reason_buf, buf_len, "Invalid non-positive priority score (%.2f <= 0)", crate->priority_score);
         return ERR_INVALID_PRIORITY;
     }
@@ -91,10 +98,16 @@ int parse_csv_line(const char *raw_line, int line_num, ReliefCrate *crate, char 
 
     char tokens[12][MAX_LINE_LEN];
     int token_count = split_csv_line(line_copy, tokens, 12);
+    if (token_count < 0) {
+        if (err_msg) snprintf(err_msg, err_buf_len, "Malformed CSV: unterminated quoted field");
+        return ERR_MALFORMED_ROW;
+    }
 
     /*
      * We support two standard layouts:
-     * 8-column layout:
+     * 9-column exported layout:
+     *   crate_id,description,category,weight_kg,priority_score,density,arrival_timestamp,fragility_constraint,status
+     * 8-column layout (without density):
      *   crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status
      * 7-column layout (without description):
      *   crate_id,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status
@@ -110,7 +123,18 @@ int parse_csv_line(const char *raw_line, int line_num, ReliefCrate *crate, char 
 
     int idx_id, idx_desc, idx_cat, idx_w, idx_v, idx_ts, idx_frag, idx_st;
 
-    if (token_count >= 8) {
+    if (token_count >= 9) {
+        /* Exported clean-manifest layout includes density before timestamp. */
+        idx_id = 0;
+        idx_desc = 1;
+        idx_cat = 2;
+        idx_w = 3;
+        idx_v = 4;
+        idx_ts = 6;
+        idx_frag = 7;
+        idx_st = 8;
+        strncpy(crate->description, tokens[idx_desc], MAX_DESC_LEN - 1);
+    } else if (token_count == 8) {
         idx_id = 0;
         idx_desc = 1;
         idx_cat = 2;
@@ -157,8 +181,8 @@ int parse_csv_line(const char *raw_line, int line_num, ReliefCrate *crate, char 
         if (err_msg) snprintf(err_msg, err_buf_len, "Non-numeric weight value '%s'", tokens[idx_w]);
         return ERR_INVALID_WEIGHT;
     }
-    if (crate->weight_kg <= 0.0) {
-        if (err_msg) snprintf(err_msg, err_buf_len, "Negative or zero weight: %.2f kg", crate->weight_kg);
+    if (!isfinite(crate->weight_kg) || crate->weight_kg <= 0.0) {
+        if (err_msg) snprintf(err_msg, err_buf_len, "Weight must be finite and greater than zero");
         return ERR_INVALID_WEIGHT;
     }
 
@@ -172,8 +196,8 @@ int parse_csv_line(const char *raw_line, int line_num, ReliefCrate *crate, char 
         if (err_msg) snprintf(err_msg, err_buf_len, "Non-numeric priority value '%s'", tokens[idx_v]);
         return ERR_INVALID_PRIORITY;
     }
-    if (crate->priority_score <= 0.0) {
-        if (err_msg) snprintf(err_msg, err_buf_len, "Negative or zero priority: %.2f", crate->priority_score);
+    if (!isfinite(crate->priority_score) || crate->priority_score <= 0.0) {
+        if (err_msg) snprintf(err_msg, err_buf_len, "Priority must be finite and greater than zero");
         return ERR_INVALID_PRIORITY;
     }
 
@@ -202,6 +226,87 @@ int parse_csv_line(const char *raw_line, int line_num, ReliefCrate *crate, char 
     }
 
     return VALID_OK;
+}
+
+
+/* Public deduplication helper declared in sanitizer.h. Returns the clean count. */
+int deduplicate_manifest(
+    ReliefCrate *raw_crates,
+    int raw_count,
+    ReliefCrate *clean_crates,
+    int max_clean,
+    QuarantineRecord *quarantine_records,
+    int *quarantine_count,
+    int max_quarantine,
+    ManifestStats *stats
+) {
+    if ((raw_count > 0 && !raw_crates) || !clean_crates || !quarantine_count || !stats ||
+        raw_count < 0 || max_clean < 0 || max_quarantine < 0) {
+        return -1;
+    }
+
+    int clean_count = 0;
+    for (int i = 0; i < raw_count; i++) {
+        ReliefCrate *candidate = &raw_crates[i];
+        int existing = -1;
+        for (int j = 0; j < clean_count; j++) {
+            if (strcmp(clean_crates[j].crate_id, candidate->crate_id) == 0) {
+                existing = j;
+                break;
+            }
+        }
+
+        if (existing < 0 && clean_count < max_clean) {
+            clean_crates[clean_count++] = *candidate;
+            continue;
+        }
+
+        ReliefCrate rejected_copy;
+        ReliefCrate *rejected = candidate;
+        const char *reason = "Clean manifest capacity exceeded";
+        const char *action = "Excluded because clean manifest is full";
+        if (existing >= 0) {
+            stats->duplicates_resolved++;
+            int cmp = compare_iso_timestamps(candidate->arrival_timestamp,
+                                             clean_crates[existing].arrival_timestamp);
+            if (cmp > 0) {
+                rejected_copy = clean_crates[existing];
+                rejected = &rejected_copy;
+                reason = "Duplicate crate_id superseded by newer timestamp";
+                action = "Replaced by newer manifest record";
+                clean_crates[existing] = *candidate;
+            } else {
+                reason = "Duplicate crate_id; older or equal timestamp";
+                action = "Ignored older duplicate record";
+            }
+        }
+        if (quarantine_records && *quarantine_count < max_quarantine) {
+            QuarantineRecord *record = &quarantine_records[(*quarantine_count)++];
+            memset(record, 0, sizeof(*record));
+            strncpy(record->crate_id, rejected->crate_id, MAX_ID_LEN - 1);
+            record->line_number = rejected->line_number;
+            snprintf(record->raw_record, sizeof(record->raw_record),
+                     "%s,%s,%s,%.6f,%.6f,%s,%d,%s",
+                     rejected->crate_id, rejected->description,
+                     category_to_string(rejected->category), rejected->weight_kg,
+                     rejected->priority_score, rejected->arrival_timestamp,
+                     rejected->fragility_constraint, status_to_string(rejected->status));
+            snprintf(record->rejection_reason, sizeof(record->rejection_reason), "%s", reason);
+            snprintf(record->action_taken, sizeof(record->action_taken), "%s", action);
+            snprintf(record->detected_timestamp, sizeof(record->detected_timestamp), "%s",
+                     candidate->arrival_timestamp);
+        }
+        stats->quarantined_count++;
+    }
+
+    stats->accepted_ready_count = clean_count;
+    stats->total_clean_weight = 0.0;
+    stats->total_clean_priority = 0.0;
+    for (int i = 0; i < clean_count; i++) {
+        stats->total_clean_weight += clean_crates[i].weight_kg;
+        stats->total_clean_priority += clean_crates[i].priority_score;
+    }
+    return clean_count;
 }
 
 int sanitize_manifest(
@@ -313,6 +418,19 @@ int sanitize_manifest(
         /* Record passed initial syntax checks and is READY -> add to deduplication pool */
         if (pool_count < MAX_CRATES) {
             raw_valid_pool[pool_count++] = parsed_crate;
+        } else {
+            stats->quarantined_count++;
+            stats->schema_violation_count++;
+            if (quarantine_count < MAX_QUARANTINE_RECORDS) {
+                QuarantineRecord *qr = &quarantine_records[quarantine_count++];
+                memset(qr, 0, sizeof(*qr));
+                strncpy(qr->crate_id, parsed_crate.crate_id, MAX_ID_LEN - 1);
+                qr->line_number = line_number;
+                strncpy(qr->raw_record, line_buf, MAX_LINE_LEN - 1);
+                snprintf(qr->rejection_reason, MAX_REASON_LEN, "Sanitizer candidate limit (%d) exceeded", MAX_CRATES);
+                strncpy(qr->action_taken, "Rejected; not silently discarded", MAX_REASON_LEN - 1);
+                strncpy(qr->detected_timestamp, parsed_crate.arrival_timestamp, MAX_TIMESTAMP_LEN - 1);
+            }
         }
     }
 
@@ -337,6 +455,21 @@ int sanitize_manifest(
             /* Brand new unique crate_id */
             if (*clean_count < max_crates) {
                 clean_crates[(*clean_count)++] = *cand;
+            } else {
+                stats->quarantined_count++;
+                if (quarantine_count < MAX_QUARANTINE_RECORDS) {
+                    QuarantineRecord *qr = &quarantine_records[quarantine_count++];
+                    memset(qr, 0, sizeof(*qr));
+                    strncpy(qr->crate_id, cand->crate_id, MAX_ID_LEN - 1);
+                    qr->line_number = cand->line_number;
+                    snprintf(qr->raw_record, MAX_LINE_LEN, "%s,%s,%.2f,%.2f",
+                             cand->crate_id, category_to_string(cand->category),
+                             cand->weight_kg, cand->priority_score);
+                    snprintf(qr->rejection_reason, MAX_REASON_LEN,
+                             "Output buffer capacity (%d) exceeded", max_crates);
+                    strncpy(qr->action_taken, "Rejected; not silently discarded", MAX_REASON_LEN - 1);
+                    strncpy(qr->detected_timestamp, cand->arrival_timestamp, MAX_TIMESTAMP_LEN - 1);
+                }
             }
         } else {
             /* Duplicate crate_id encountered: compare arrival timestamps */
@@ -409,57 +542,59 @@ int sanitize_manifest(
     return 0;
 }
 
-int write_clean_manifest_csv(const char *filepath, const ReliefCrate *crates, int count) {
-    if (!filepath || !crates) return -1;
+static void write_csv_field(FILE *file, const char *value) {
+    const unsigned char *p = (const unsigned char *)(value ? value : "");
+    fputc('"', file);
+    while (*p) {
+        if (*p == '"') fputc('"', file);
+        fputc(*p++, file);
+    }
+    fputc('"', file);
+}
 
+int write_clean_manifest_csv(const char *filepath, const ReliefCrate *crates, int count) {
+    if (!filepath || (!crates && count > 0) || count < 0) return -1;
     FILE *fout = fopen(filepath, "w");
     if (!fout) {
         fprintf(stderr, "[ERROR] Cannot create clean manifest file: %s\n", filepath);
         return -1;
     }
-
-    /* Standard CSV header */
     fprintf(fout, "crate_id,description,category,weight_kg,priority_score,density,arrival_timestamp,fragility_constraint,status\n");
-
     for (int i = 0; i < count; i++) {
-        fprintf(fout, "%s,\"%s\",%s,%.2f,%.2f,%.4f,%s,%d,%s\n",
-                crates[i].crate_id,
-                crates[i].description,
-                category_to_string(crates[i].category),
-                crates[i].weight_kg,
-                crates[i].priority_score,
-                crates[i].density,
-                crates[i].arrival_timestamp,
-                crates[i].fragility_constraint,
-                status_to_string(crates[i].status));
+        write_csv_field(fout, crates[i].crate_id);
+        fputc(',', fout);
+        write_csv_field(fout, crates[i].description);
+        fprintf(fout, ",%s,%.6f,%.6f,%.6f,",
+                category_to_string(crates[i].category), crates[i].weight_kg,
+                crates[i].priority_score, crates[i].density);
+        write_csv_field(fout, crates[i].arrival_timestamp);
+        fprintf(fout, ",%d,", crates[i].fragility_constraint);
+        write_csv_field(fout, status_to_string(crates[i].status));
+        fputc('\n', fout);
     }
-
-    fclose(fout);
+    if (fclose(fout) != 0) return -1;
     return 0;
 }
 
 int write_quarantine_log_csv(const char *filepath, const QuarantineRecord *records, int count) {
-    if (!filepath || !records) return -1;
-
+    if (!filepath || (!records && count > 0) || count < 0) return -1;
     FILE *fout = fopen(filepath, "w");
     if (!fout) {
         fprintf(stderr, "[ERROR] Cannot create quarantine log file: %s\n", filepath);
         return -1;
     }
-
-    /* Structured Audit Trail Header */
     fprintf(fout, "log_id,line_number,crate_id,rejection_reason,action_taken,raw_record\n");
-
     for (int i = 0; i < count; i++) {
-        fprintf(fout, "%d,%d,%s,\"%s\",\"%s\",\"%s\"\n",
-                i + 1,
-                records[i].line_number,
-                records[i].crate_id,
-                records[i].rejection_reason,
-                records[i].action_taken,
-                records[i].raw_record);
+        fprintf(fout, "%d,%d,", i + 1, records[i].line_number);
+        write_csv_field(fout, records[i].crate_id);
+        fputc(',', fout);
+        write_csv_field(fout, records[i].rejection_reason);
+        fputc(',', fout);
+        write_csv_field(fout, records[i].action_taken);
+        fputc(',', fout);
+        write_csv_field(fout, records[i].raw_record);
+        fputc('\n', fout);
     }
-
-    fclose(fout);
+    if (fclose(fout) != 0) return -1;
     return 0;
 }

@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import csv
 import heapq
+from fractions import Fraction
 import io
 import math
 import time
 import tracemalloc
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from datetime import datetime, timezone
 from typing import Callable, Iterable, Optional
 
 import numpy as np
@@ -85,6 +87,17 @@ def _safe_float(value: str) -> Optional[float]:
         return None
     return number if math.isfinite(number) else None
 
+
+
+def _timestamp_key(value: str) -> Optional[datetime]:
+    """Return a UTC-normalized timestamp for duplicate precedence."""
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 def parse_manifest(csv_text: str) -> tuple[list[Crate], list[dict], HygieneReport]:
     """Parse, validate and deduplicate a repository-style CSV manifest.
@@ -208,7 +221,14 @@ def parse_manifest(csv_text: str) -> tuple[list[Crate], list[dict], HygieneRepor
                 report.duplicates_resolved += 1
                 # ISO-8601 sortable timestamps; on a tie retain the earlier row,
                 # as the repository sanitizer does (replace only if newer).
-                if crate.arrival_timestamp > previous.arrival_timestamp:
+                candidate_time = _timestamp_key(crate.arrival_timestamp)
+                previous_time = _timestamp_key(previous.arrival_timestamp)
+                is_newer = (
+                    candidate_time > previous_time
+                    if candidate_time is not None and previous_time is not None
+                    else crate.arrival_timestamp > previous.arrival_timestamp
+                )
+                if is_newer:
                     reject(
                         previous.line_number, previous.crate_id,
                         f"Duplicate crate_id superseded by newer record ({crate.arrival_timestamp} > {previous.arrival_timestamp})",
@@ -237,10 +257,10 @@ def _decimal_places(value: float) -> int:
     return max(0, -d.as_tuple().exponent)
 
 
-def _scaled_ints(values: list[float], label: str) -> tuple[list[int], int]:
+def _scaled_ints(values: list[float], label: str, max_places: int = 6) -> tuple[list[int], int]:
     places = max((_decimal_places(v) for v in values), default=0)
-    if places > 6:
-        raise ValueError(f"{label} has more than six decimal places; exact DP scaling is unsupported.")
+    if places > max_places:
+        raise ValueError(f"{label} has more than {max_places} decimal places; exact integer scaling is unsupported.")
     scale = 10 ** places
     result = []
     for value in values:
@@ -278,34 +298,35 @@ def _profile_call(algorithm: str, function: Callable[[], dict]) -> SolverResult:
 
 def solve_greedy(crates: list[Crate], capacity: float) -> SolverResult:
     def run() -> dict:
-        ordered = sorted(
-            enumerate(crates),
-            key=lambda pair: (
-                -(pair[1].priority_score / pair[1].weight_kg),
-                pair[1].weight_kg,
-                pair[1].crate_id,
-                pair[0],
-            ),
-        )
+        if not math.isfinite(capacity) or capacity < 0:
+            raise ValueError("Capacity must be finite and non-negative.")
+        weights, _ = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=15)
+        capacity_units = weights.pop()
+        ordered = sorted(enumerate(crates), key=lambda pair: (
+            -(pair[1].priority_score / pair[1].weight_kg),
+            pair[1].weight_kg, pair[1].crate_id, pair[0],
+        ))
         chosen: list[int] = []
-        used_weight = 0.0
-        total_priority = 0.0
-        considered = 0
+        used_units = 0
         for original_index, crate in ordered:
-            considered += 1
-            if crate.weight_kg <= capacity - used_weight + 1e-12:
+            if used_units + weights[original_index] <= capacity_units:
                 chosen.append(original_index)
-                used_weight += crate.weight_kg
-                total_priority += crate.priority_score
+                used_units += weights[original_index]
         chosen.sort()
         return {
             "selected_indices": chosen,
-            "total_weight": used_weight,
-            "total_priority": total_priority,
-            "work_count": considered,
-            "trace": [f"Sorted {considered} READY crates by priority/weight density.", f"Selected {len(chosen)} complete crates."],
+            "total_weight": sum(crates[i].weight_kg for i in chosen),
+            "total_priority": sum(crates[i].priority_score for i in chosen),
+            "work_count": len(crates),
+            "trace": [f"Sorted {len(crates)} READY crates by priority/weight density.",
+                      f"Selected {len(chosen)} complete crates using exact scaled-weight feasibility."],
         }
-    return _profile_call("Greedy Density", run)
+    try:
+        return _profile_call("Greedy Density", run)
+    except ValueError as exc:
+        return SolverResult(algorithm="Greedy Density", selected_indices=[], total_weight=0.0,
+            total_priority=0.0, runtime_seconds=0.0, peak_traced_mb=0.0, work_count=0,
+            optimal=False, status=f"Not run: {exc}")
 
 
 def solve_dynamic_programming(
@@ -314,78 +335,65 @@ def solve_dynamic_programming(
     memory_limit_mb: int = 256,
 ) -> SolverResult:
     def run() -> dict:
-        if not crates or capacity <= 0:
+        if not math.isfinite(capacity) or capacity < 0:
+            raise ValueError("Capacity must be finite and non-negative.")
+        if not crates or capacity == 0:
             return {"selected_indices": [], "total_weight": 0.0, "total_priority": 0.0, "work_count": 0}
-        eligible = [(index, crate) for index, crate in enumerate(crates) if crate.weight_kg <= capacity + 1e-12]
-        if not eligible:
+        all_weights, weight_scale = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity")
+        capacity_units = all_weights.pop()
+        eligible_positions = [i for i, w in enumerate(all_weights) if w <= capacity_units]
+        if not eligible_positions:
             return {"selected_indices": [], "total_weight": 0.0, "total_priority": 0.0, "work_count": 0}
-        original_indices = [index for index, _ in eligible]
-        eligible_crates = [crate for _, crate in eligible]
-        weights, weight_scale = _scaled_ints([c.weight_kg for c in eligible_crates] + [capacity], "Weights/capacity")
-        capacity_units = weights.pop()
+        eligible_crates = [crates[i] for i in eligible_positions]
+        weights = [all_weights[i] for i in eligible_positions]
         priorities, priority_scale = _scaled_ints([c.priority_score for c in eligible_crates], "Priority scores")
+        if sum(priorities) > np.iinfo(np.int64).max:
+            raise OverflowError("Scaled total priority exceeds the signed 64-bit DP limit.")
         effective_capacity = min(capacity_units, sum(weights))
         width = effective_capacity + 1
         choice_row_bytes = (width + 7) // 8
-        required_bytes = len(eligible_crates) * choice_row_bytes + width * 16
+        required_bytes = len(eligible_crates) * choice_row_bytes + width * 40
         if required_bytes > memory_limit_mb * 1024 * 1024:
-            raise MemoryError(
-                f"DP decision table needs approximately {required_bytes / (1024*1024):.1f} MB; "
-                f"the dashboard safety limit is {memory_limit_mb} MB."
-            )
-
+            raise MemoryError(f"DP table and working arrays need approximately {required_bytes / (1024*1024):.1f} MB; "
+                              f"the dashboard safety limit is {memory_limit_mb} MB.")
         dp_value = np.zeros(width, dtype=np.int64)
         dp_weight = np.zeros(width, dtype=np.int64)
         choices = np.zeros((len(eligible_crates), choice_row_bytes), dtype=np.uint8)
         operations = 0
         for i, (w, p) in enumerate(zip(weights, priorities)):
-            if w <= effective_capacity:
-                candidate_value = dp_value[:-w] + p
-                candidate_weight = dp_weight[:-w] + w
-                target_value = dp_value[w:]
-                target_weight = dp_weight[w:]
-                improve = (candidate_value > target_value) | (
-                    (candidate_value == target_value) & (candidate_weight < target_weight)
-                )
-                target_value[improve] = candidate_value[improve]
-                target_weight[improve] = candidate_weight[improve]
-                choice_row = np.zeros(width, dtype=np.uint8)
-                choice_row[w:] = improve.astype(np.uint8, copy=False)
-                choices[i, :] = np.packbits(choice_row, bitorder="little")
-                operations += width
+            candidate_value = dp_value[:-w] + p
+            candidate_weight = dp_weight[:-w] + w
+            target_value, target_weight = dp_value[w:], dp_weight[w:]
+            improve = (candidate_value > target_value) | (
+                (candidate_value == target_value) & (candidate_weight < target_weight))
+            target_value[improve] = candidate_value[improve]
+            target_weight[improve] = candidate_weight[improve]
+            choice_row = np.zeros(width, dtype=np.uint8)
+            choice_row[w:] = improve.astype(np.uint8, copy=False)
+            choices[i, :] = np.packbits(choice_row, bitorder="little")
+            operations += width
             if progress and (i == len(eligible_crates) - 1 or (i + 1) % max(1, len(eligible_crates) // 20) == 0):
                 progress(i + 1, len(eligible_crates), operations)
-
-        # dp_value is the best value available at each capacity bound. Argmax's
-        # first occurrence implements the lower-weight tie preference.
         best_capacity = int(np.argmax(dp_value))
         selected: list[int] = []
         remaining = best_capacity
         for i in range(len(eligible_crates) - 1, -1, -1):
-            if remaining >= 0 and (choices[i, remaining >> 3] & (1 << (remaining & 7))):
-                selected.append(original_indices[i])
+            if choices[i, remaining >> 3] & (1 << (remaining & 7)):
+                selected.append(eligible_positions[i])
                 remaining -= weights[i]
         selected.sort()
-        total_weight = sum(crates[i].weight_kg for i in selected)
-        total_priority = sum(crates[i].priority_score for i in selected)
-        return {
-            "selected_indices": selected,
-            "total_weight": total_weight,
-            "total_priority": total_priority,
+        return {"selected_indices": selected,
+            "total_weight": sum(crates[i].weight_kg for i in selected),
+            "total_priority": sum(crates[i].priority_score for i in selected),
             "work_count": operations,
-            "trace": [
-                f"Exact integer scaling: weight scale {weight_scale}, priority scale {priority_scale}.",
-                f"Evaluated {operations:,} DP transitions across {len(crates)} crates.",
-            ],
-        }
+            "trace": [f"Exact integer scaling: weight scale {weight_scale}, priority scale {priority_scale}.",
+                      f"Evaluated {operations:,} DP transitions across {len(eligible_crates)} eligible crates."]}
     try:
         return _profile_call("Dynamic Programming", run)
     except (ValueError, MemoryError, OverflowError) as exc:
-        return SolverResult(
-            algorithm="Dynamic Programming", selected_indices=[], total_weight=0.0,
-            total_priority=0.0, runtime_seconds=0.0, peak_traced_mb=0.0,
-            work_count=0, optimal=False, status=f"Not run: {exc}",
-        )
+        return SolverResult(algorithm="Dynamic Programming", selected_indices=[], total_weight=0.0,
+            total_priority=0.0, runtime_seconds=0.0, peak_traced_mb=0.0, work_count=0,
+            optimal=False, status=f"Not run: {exc}")
 
 
 def solve_branch_and_bound(
@@ -395,166 +403,178 @@ def solve_branch_and_bound(
     progress_interval: int = 500,
 ) -> SolverResult:
     def run() -> dict:
-        if not crates or capacity <= 0:
-            return {"selected_indices": [], "total_weight": 0.0, "total_priority": 0.0, "work_count": 0, "nodes_explored": 0, "nodes_pruned": 0}
-
-        # Branch-and-Bound explores high-density items first, exactly as the
-        # stand-alone DAA_PBL.c program does before building its state-space tree.
-        ordered = sorted(
-            enumerate(crates),
-            key=lambda pair: (-(pair[1].priority_score / pair[1].weight_kg), pair[0]),
-        )
-        items = [item for _, item in ordered]
-        original_indices = [idx for idx, _ in ordered]
-        n = len(items)
-        ratios = [item.priority_score / item.weight_kg for item in items]
-
-        # Seed the incumbent with a feasible density-first packing. This is only
-        # an initial lower bound; the B&B search still proves or improves it.
-        greedy_mask = 0
-        greedy_w = 0.0
-        greedy_v = 0.0
-        for i, item in enumerate(items):
-            if item.weight_kg <= capacity - greedy_w + 1e-12:
-                greedy_mask |= (1 << i)
-                greedy_w += item.weight_kg
-                greedy_v += item.priority_score
+        if not math.isfinite(capacity) or capacity < 0:
+            raise ValueError("Capacity must be finite and non-negative.")
+        if not crates or capacity == 0:
+            return {"selected_indices": [], "total_weight": 0.0, "total_priority": 0.0,
+                    "work_count": 0, "nodes_explored": 0, "nodes_pruned": 0}
+        # Exact integer units make feasibility decisions exact. Fraction preserves
+        # the fractional-knapsack relaxation exactly for mathematically safe pruning.
+        weight_units, weight_scale = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=15)
+        capacity_units = weight_units.pop()
+        value_units, value_scale = _scaled_ints([c.priority_score for c in crates], "Priority scores", max_places=15)
+        ordered_indices = sorted(range(len(crates)),
+            key=lambda i: (-Fraction(value_units[i], weight_units[i]), i))
+        weights = [weight_units[i] for i in ordered_indices]
+        values = [value_units[i] for i in ordered_indices]
+        n = len(crates)
+        greedy_mask = greedy_w = greedy_v = 0
+        for i, (w, v) in enumerate(zip(weights, values)):
+            if greedy_w + w <= capacity_units:
+                greedy_mask |= 1 << i
+                greedy_w += w
+                greedy_v += v
         best_value, best_weight, best_mask = greedy_v, greedy_w, greedy_mask
 
-        def bound(level: int, weight: float, value: float) -> float:
-            if weight > capacity + 1e-12:
-                return -math.inf
-            upper = value
-            total_w = weight
-            j = level
-            while j < n and total_w + items[j].weight_kg <= capacity + 1e-12:
-                total_w += items[j].weight_kg
-                upper += items[j].priority_score
+        def bound(level: int, weight: int, value: int) -> Fraction:
+            if weight > capacity_units:
+                return Fraction(-1, 1)
+            upper, total_w, j = Fraction(value, 1), weight, level
+            while j < n and total_w + weights[j] <= capacity_units:
+                total_w += weights[j]
+                upper += values[j]
                 j += 1
-            if j < n and total_w < capacity:
-                upper += (capacity - total_w) * ratios[j]
-            # Round the optimistic bound upward very slightly to avoid pruning a
-            # branch solely because of floating-point representation noise.
-            return math.nextafter(upper, math.inf)
+            if j < n and total_w < capacity_units:
+                upper += Fraction((capacity_units - total_w) * values[j], weights[j])
+            return upper
 
         serial = 0
-        root_bound = bound(0, 0.0, 0.0)
-        queue: list[tuple[float, int, int, float, float, int]] = [
-            (-root_bound, serial, 0, 0.0, 0.0, 0)
-        ]
-        explored = 0
-        pruned = 0
-        generated = 1
-        trace: list[str] = [f"Root created with optimistic upper bound {root_bound:.3f}.", "Items ordered by descending priority/weight ratio."]
+        root_bound = bound(0, 0, 0)
+        queue: list[tuple[Fraction, int, int, int, int, int]] = [(-root_bound, serial, 0, 0, 0, 0)]
+        explored = pruned = 0
+        trace = [f"Root created with exact fractional upper bound {float(root_bound) / value_scale:.3f}.",
+                 "Items ordered by exact priority/weight density."]
         complete = True
-
         while queue:
             if explored >= max_nodes:
                 complete = False
                 break
             neg_bound, _, level, current_w, current_v, mask = heapq.heappop(queue)
-            current_bound = -neg_bound
-            explored += 1
-            if current_bound <= best_value + 1e-10:
+            if -neg_bound <= best_value:
                 pruned += 1
+                explored += 1
                 continue
+            explored += 1
             if level >= n:
                 continue
-
-            item = items[level]
-            # Include branch.
-            include_w = current_w + item.weight_kg
-            include_v = current_v + item.priority_score
-            if include_w <= capacity + 1e-12:
+            item_w, item_v = weights[level], values[level]
+            include_w = current_w + item_w
+            if include_w <= capacity_units:
+                include_v = current_v + item_v
                 include_mask = mask | (1 << level)
-                if (include_v > best_value + 1e-10) or (abs(include_v - best_value) <= 1e-10 and include_w < best_weight - 1e-10):
+                if include_v > best_value:
                     best_value, best_weight, best_mask = include_v, include_w, include_mask
                     if len(trace) < 300:
-                        trace.append(f"New incumbent: priority {best_value:.2f}, weight {best_weight:.2f} kg.")
+                        trace.append(f"New incumbent: priority {best_value / value_scale:.2f}, "
+                                     f"weight {best_weight / weight_scale:.2f} kg.")
                 include_bound = bound(level + 1, include_w, include_v)
-                if include_bound > best_value + 1e-10:
+                if include_bound > best_value:
                     serial += 1
                     heapq.heappush(queue, (-include_bound, serial, level + 1, include_w, include_v, include_mask))
-                    generated += 1
                 else:
                     pruned += 1
             else:
                 pruned += 1
-
-            # Exclude branch.
             exclude_bound = bound(level + 1, current_w, current_v)
-            if exclude_bound > best_value + 1e-10:
+            if exclude_bound > best_value:
                 serial += 1
                 heapq.heappush(queue, (-exclude_bound, serial, level + 1, current_w, current_v, mask))
-                generated += 1
             else:
                 pruned += 1
-
-            if progress and (explored % progress_interval == 0):
-                progress(explored, max_nodes, best_value, pruned)
-
-        selected = [original_indices[i] for i in range(n) if (best_mask >> i) & 1]
-        selected.sort()
+            if progress and progress_interval > 0 and explored % progress_interval == 0:
+                progress(explored, max_nodes, best_value / value_scale, pruned)
+        selected = sorted(ordered_indices[i] for i in range(n) if (best_mask >> i) & 1)
         if not queue:
             complete = True
         if progress:
-            progress(explored, max_nodes, best_value, pruned)
+            progress(explored, max_nodes, best_value / value_scale, pruned)
         trace.append(f"Search ended after {explored:,} explored nodes and {pruned:,} pruned nodes.")
-        if complete:
-            trace.append("Priority queue exhausted: optimality proven for this model.")
-        else:
-            trace.append(f"Node safety limit ({max_nodes:,}) reached; incumbent is feasible but optimality is not proven.")
-        return {
-            "selected_indices": selected,
-            "total_weight": best_weight,
-            "total_priority": best_value,
-            "work_count": explored,
-            "nodes_explored": explored,
-            "nodes_pruned": pruned,
-            "optimal": complete,
-            "status": "Optimality proven" if complete else "Stopped at node safety limit",
-            "trace": trace,
-        }
-    return _profile_call("Branch and Bound", run)
-
+        trace.append("Priority queue exhausted: optimality proven for this model." if complete else
+            f"Node safety limit ({max_nodes:,}) reached; incumbent is feasible but optimality is not proven.")
+        return {"selected_indices": selected,
+            "total_weight": sum(crates[i].weight_kg for i in selected),
+            "total_priority": sum(crates[i].priority_score for i in selected),
+            "work_count": explored, "nodes_explored": explored, "nodes_pruned": pruned,
+            "optimal": complete, "status": "Optimality proven" if complete else "Stopped at node safety limit",
+            "trace": trace}
+    try:
+        return _profile_call("Branch and Bound", run)
+    except ValueError as exc:
+        return SolverResult(algorithm="Branch and Bound", selected_indices=[], total_weight=0.0,
+            total_priority=0.0, runtime_seconds=0.0, peak_traced_mb=0.0, work_count=0,
+            optimal=False, status=f"Not run: {exc}")
 
 def solve_brute_force(crates: list[Crate], capacity: float, max_items: int = 20) -> SolverResult:
     def run() -> dict:
         n = len(crates)
         if n > max_items:
             raise ValueError(f"Brute force is limited to {max_items} crates; this dataset has {n}.")
-        best_value = 0.0
-        best_weight = 0.0
-        best_mask = 0
+        if not math.isfinite(capacity) or capacity < 0:
+            raise ValueError("Capacity must be finite and non-negative.")
+        weights, _ = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=15)
+        capacity_units = weights.pop()
+        values, _ = _scaled_ints([c.priority_score for c in crates], "Priority scores", max_places=15)
+        best_value = best_weight = best_mask = 0
         operations = 0
         for mask in range(1 << n):
             operations += 1
-            weight = 0.0
-            value = 0.0
-            for i, crate in enumerate(crates):
+            weight = value = 0
+            for i in range(n):
                 if (mask >> i) & 1:
-                    weight += crate.weight_kg
-                    value += crate.priority_score
-            if weight <= capacity + 1e-12 and value > best_value + 1e-10:
+                    weight += weights[i]
+                    value += values[i]
+            if weight <= capacity_units and value > best_value:
                 best_value, best_weight, best_mask = value, weight, mask
         selected = [i for i in range(n) if (best_mask >> i) & 1]
-        return {"selected_indices": selected, "total_weight": best_weight, "total_priority": best_value, "work_count": operations}
-    return _profile_call("Brute Force Oracle", run)
+        return {
+            "selected_indices": selected,
+            "total_weight": sum(crates[i].weight_kg for i in selected),
+            "total_priority": sum(crates[i].priority_score for i in selected),
+            "work_count": operations,
+        }
+    try:
+        return _profile_call("Brute Force Oracle", run)
+    except ValueError as exc:
+        return SolverResult(algorithm="Brute Force Oracle", selected_indices=[], total_weight=0.0,
+            total_priority=0.0, runtime_seconds=0.0, peak_traced_mb=0.0, work_count=0,
+            optimal=False, status=f"Not run: {exc}")
+
 
 
 def run_solver_suite(
-    crates: list[Crate], capacity: float,
-    selected: tuple[str, ...] = ("Branch and Bound", "Dynamic Programming", "Greedy Density"),
+    crates: list[Crate],
+    capacity: float,
+    algorithms: tuple[str, ...],
     progress: Optional[Callable[[str, int, int, float, int], None]] = None,
     max_nodes: int = 1_000_000,
 ) -> list[SolverResult]:
+    """Run the selected dashboard solvers in the requested order.
+
+    The dashboard callback has a common five-argument contract. Adapt the
+    solver-specific progress callbacks here so the UI and engine stay aligned.
+    """
     results: list[SolverResult] = []
-    if "Branch and Bound" in selected:
-        cb = (lambda e, m, v, p: progress("Branch and Bound", e, m, v, p)) if progress else None
-        results.append(solve_branch_and_bound(crates, capacity, cb, max_nodes=max_nodes))
-    if "Dynamic Programming" in selected:
-        cb2 = (lambda e, m, ops: progress("Dynamic Programming", e, m, float(ops), 0)) if progress else None
-        results.append(solve_dynamic_programming(crates, capacity, cb2))
-    if "Greedy Density" in selected:
-        results.append(solve_greedy(crates, capacity))
+    for algorithm in algorithms:
+        if algorithm == "Branch and Bound":
+            callback = None
+            if progress:
+                callback = lambda current, maximum, incumbent, pruned: progress(
+                    algorithm, current, maximum, incumbent, pruned
+                )
+            results.append(solve_branch_and_bound(
+                crates, capacity, progress=callback, max_nodes=max_nodes
+            ))
+        elif algorithm == "Dynamic Programming":
+            callback = None
+            if progress:
+                callback = lambda current, maximum, operations: progress(
+                    algorithm, current, maximum, float(operations), 0
+                )
+            results.append(solve_dynamic_programming(
+                crates, capacity, progress=callback
+            ))
+        elif algorithm == "Greedy Density":
+            results.append(solve_greedy(crates, capacity))
+        else:
+            raise ValueError(f"Unknown solver requested: {algorithm}")
     return results

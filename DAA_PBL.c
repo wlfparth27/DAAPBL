@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #define MAX 100
 
 typedef struct {
@@ -31,8 +32,10 @@ void swap(Node *a, Node *b)
 }
 
 
-void insert(Node node)
+int insert(Node node)
 {
+    if (heapSize >= (int)(sizeof(heap) / sizeof(heap[0])))
+        return 0;
     int i = heapSize;
     heap[heapSize++] = node;
     while (i > 0)
@@ -43,6 +46,7 @@ void insert(Node node)
         swap(&heap[parent], &heap[i]);
         i = parent;
     }
+    return 1;
 }
 
 
@@ -134,7 +138,10 @@ void branchAndBound(Item items[], int n, float capacity)
     for (int i = 0; i < n; i++)
         root.selected[i] = 0;
     root.bound = calculateBound(root, items, n, capacity);
-    insert(root);
+    if (!insert(root)) {
+        printf("ERROR: Branch-and-Bound heap capacity exceeded; optimality not proven.\n");
+        return;
+    }
     printf("\n\nSEARCH TREE TRACE\n");
     printf("-------------------------------------------------------------\n");
     printf("%-7s %-10s %-10s %-10s %-12s\n", "Level", "Weight", "Priority", "Bound", "Status");
@@ -175,7 +182,11 @@ void branchAndBound(Item items[], int n, float capacity)
             includeNode.bound = calculateBound(includeNode, items, n, capacity);
             if (includeNode.bound > bestPriority)
             {
-                insert(includeNode);
+                if (!insert(includeNode)) {
+                    printf("ERROR: Branch-and-Bound heap capacity exceeded; optimality not proven.\n");
+                    heapSize = 0;
+                    return;
+                }
                 printf("%-7d %-10.2f %-10.2f %-10.2f INCLUDE\n", includeNode.level, includeNode.weight, includeNode.priority, includeNode.bound);
             }
             else
@@ -195,7 +206,11 @@ void branchAndBound(Item items[], int n, float capacity)
         excludeNode.bound = calculateBound(excludeNode, items, n, capacity);
         if (excludeNode.bound > bestPriority)
         {
-            insert(excludeNode);
+            if (!insert(excludeNode)) {
+                printf("ERROR: Branch-and-Bound heap capacity exceeded; optimality not proven.\n");
+                heapSize = 0;
+                return;
+            }
             printf("%-7d %-10.2f %-10.2f %-10.2f EXCLUDE\n", excludeNode.level, excludeNode.weight, excludeNode.priority, excludeNode.bound);
         }
         else
@@ -241,7 +256,10 @@ int main()
     printf("      RELIEF PACKING - BRANCH AND BOUND\n");
     printf("=============================================\n");
     printf("\nEnter number of relief packages: ");
-    scanf("%d", &n);
+    if (scanf("%d", &n) != 1) {
+        printf("Invalid package count.\n");
+        return 1;
+    }
     if (n <= 0 || n > MAX)
     {
         printf("Invalid number of packages.\n");
@@ -253,11 +271,16 @@ int main()
         items[i].id = i + 1;
         printf("\nPackage R%d\n", i + 1);
         printf("Weight: ");
-        scanf("%f", &items[i].weight);
+        if (scanf("%f", &items[i].weight) != 1 || !isfinite(items[i].weight)) {
+            printf("Invalid package weight.\n");
+            return 1;
+        }
         printf("Priority: ");
-        scanf("%f", &items[i].priority);
-        if (items[i].weight <= 0 ||
-            items[i].priority < 0)
+        if (scanf("%f", &items[i].priority) != 1 || !isfinite(items[i].priority)) {
+            printf("Invalid package priority.\n");
+            return 1;
+        }
+        if (items[i].weight <= 0 || items[i].priority <= 0)
         {
             printf("Invalid package data.\n");
             return 1;
@@ -265,8 +288,7 @@ int main()
         items[i].ratio = items[i].priority / items[i].weight;
     }
     printf("\nEnter vehicle capacity: ");
-    scanf("%f", &capacity);
-    if (capacity <= 0)
+    if (scanf("%f", &capacity) != 1 || !isfinite(capacity) || capacity <= 0)
     {
         printf("Invalid vehicle capacity.\n");
         return 1;

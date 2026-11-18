@@ -2,6 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#ifdef _WIN32
+#include <direct.h>
+#define MAKE_TEST_DIR(path) _mkdir(path)
+#else
+#include <sys/stat.h>
+#define MAKE_TEST_DIR(path) mkdir(path, 0777)
+#endif
 #include "relief_schema.h"
 #include "sanitizer.h"
 #include "dataset_generator.h"
@@ -75,8 +82,20 @@ void test_dirty_manifest_sanitization(void) {
 
     /* Check that clean output file was created and is non-empty */
     FILE *fclean = fopen(clean_path, "r");
-    TEST_ASSERT(fclean != NULL, "Clean output CSV file successfully written");
+    int clean_file_written = (fclean != NULL);
+    TEST_ASSERT(clean_file_written, "Clean output CSV file successfully written");
     if (fclean) fclose(fclean);
+
+    /* The sanitizer's own nine-column clean export must be valid input again. */
+    if (clean_file_written) {
+        ReliefCrate roundtrip[64];
+        int roundtrip_count = 0;
+        ManifestStats roundtrip_stats;
+        int roundtrip_res = sanitize_manifest(clean_path, NULL, NULL, roundtrip, 64,
+                                              &roundtrip_count, &roundtrip_stats);
+        TEST_ASSERT(roundtrip_res == 0, "Re-imported clean CSV without parser error");
+        TEST_ASSERT(roundtrip_count == clean_count, "Clean CSV round-trip preserved accepted crate count");
+    }
 
     /* Check that quarantine log was created and contains audit trail */
     FILE *fquar = fopen(quar_path, "r");
@@ -93,6 +112,10 @@ void test_deduplication_timestamp_rule(void) {
     printf("\n=== Running Test Suite 3: Deduplication (Latest Timestamp Invariant) ===\n");
     const char *dedup_path = "data/test_dedup_tmp.csv";
     FILE *fp = fopen(dedup_path, "w");
+    if (!fp) {
+        TEST_ASSERT(0, "Could not create deduplication test fixture");
+        return;
+    }
     fprintf(fp, "crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status\n");
     /* Earlier record: priority 50.0 */
     fprintf(fp, "CR-DEDUP-01,\"Draft Kit\",Medical,10.0,50.0,2026-11-16T08:00:00Z,1,READY\n");
@@ -227,7 +250,44 @@ void test_edge_case_5_greedy_trap(void) {
     remove(trap_path);
 }
 
+/* Regression: NaN and infinity must not pass numeric validation. */
+void test_non_finite_numeric_values(void) {
+    printf("\n=== Running Test Suite 9: Non-finite Numeric Rejection ===\n");
+    ReliefCrate crate;
+    char error[128] = {0};
+    int quoted_result = parse_csv_line(
+        "CR-COMMA,\"Kit, with \"\"quotes\"\"\",Medical,1.0,2.0,2026-11-18T00:00:00Z,0,READY",
+        2, &crate, error, sizeof(error));
+    TEST_ASSERT(quoted_result == VALID_OK, "Quoted commas and escaped quotes parsed");
+    TEST_ASSERT(strcmp(crate.description, "Kit, with \"quotes\"") == 0,
+                 "Quoted description preserved after CSV decoding");
+    memset(error, 0, sizeof(error));
+    int weight_result = parse_csv_line(
+        "CR-NAN,Invalid Weight,Medical,nan,10.0,2026-11-18T00:00:00Z,0,READY",
+        2, &crate, error, sizeof(error));
+    TEST_ASSERT(weight_result == ERR_INVALID_WEIGHT, "NaN weight rejected");
+
+    memset(error, 0, sizeof(error));
+    int priority_result = parse_csv_line(
+        "CR-INF,Invalid Priority,Medical,1.0,inf,2026-11-18T00:00:00Z,0,READY",
+        3, &crate, error, sizeof(error));
+    TEST_ASSERT(priority_result == ERR_INVALID_PRIORITY, "Infinite priority rejected");
+    TEST_ASSERT(compare_iso_timestamps("2026-11-18T08:00:00+02:00",
+                                       "2026-11-18T06:30:00Z") < 0,
+                 "ISO timestamps compared correctly across timezone offsets");
+}
+
 int main(void) {
+    if (MAKE_TEST_DIR("data") != 0) {
+        /* An existing directory is fine; verify that it is writable. */
+        FILE *probe = fopen("data/.write_probe", "w");
+        if (!probe) {
+            fprintf(stderr, "Unable to create or access the data/ test directory.\n");
+            return 2;
+        }
+        fclose(probe);
+        remove("data/.write_probe");
+    }
     printf("========================================================================\n");
     printf(" PROJECT #29: NON-FRACTIONAL RELIEF PACKING\n");
     printf(" MEMBER 3 (BHAVYA) - DATASET HYGIENE & EDGE-CASE TEST SUITE\n");
@@ -241,6 +301,7 @@ int main(void) {
     test_edge_case_3_density_ties();
     test_edge_case_4_trivial_fit();
     test_edge_case_5_greedy_trap();
+    test_non_finite_numeric_values();
 
     printf("\n------------------------------------------------------------------------\n");
     printf("TEST RUN COMPLETE: %d Passed, %d Failed.\n", g_tests_passed, g_tests_failed);
