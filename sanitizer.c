@@ -6,11 +6,13 @@
 static void trim_whitespace(char *str) {
     if (!str) return;
     char *start = str;
-    while (*start && (isspace((unsigned char)*start) || *start == '"' || *start == '\'')) {
+    /* CSV quote delimiters are removed by split_csv_line(). Do not strip
+       quote characters here: they may be legitimate decoded field content. */
+    while (*start && isspace((unsigned char)*start)) {
         start++;
     }
     char *end = start + strlen(start);
-    while (end > start && (isspace((unsigned char)*(end - 1)) || *(end - 1) == '"' || *(end - 1) == '\'')) {
+    while (end > start && isspace((unsigned char)*(end - 1))) {
         end--;
     }
     *end = '\0';
