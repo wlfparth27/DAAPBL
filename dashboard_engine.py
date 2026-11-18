@@ -238,10 +238,10 @@ def _decimal_places(value: float) -> int:
     return max(0, -d.as_tuple().exponent)
 
 
-def _scaled_ints(values: list[float], label: str) -> tuple[list[int], int]:
+def _scaled_ints(values: list[float], label: str, max_places: int = 6) -> tuple[list[int], int]:
     places = max((_decimal_places(v) for v in values), default=0)
-    if places > 6:
-        raise ValueError(f"{label} has more than six decimal places; exact DP scaling is unsupported.")
+    if places > max_places:
+        raise ValueError(f"{label} has more than {max_places} decimal places; exact integer scaling is unsupported.")
     scale = 10 ** places
     result = []
     for value in values:
@@ -281,7 +281,7 @@ def solve_greedy(crates: list[Crate], capacity: float) -> SolverResult:
     def run() -> dict:
         if not math.isfinite(capacity) or capacity < 0:
             raise ValueError("Capacity must be finite and non-negative.")
-        weights, _ = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity")
+        weights, _ = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=12)
         capacity_units = weights.pop()
         ordered = sorted(enumerate(crates), key=lambda pair: (
             -(pair[1].priority_score / pair[1].weight_kg),
@@ -320,7 +320,7 @@ def solve_dynamic_programming(
             raise ValueError("Capacity must be finite and non-negative.")
         if not crates or capacity == 0:
             return {"selected_indices": [], "total_weight": 0.0, "total_priority": 0.0, "work_count": 0}
-        all_weights, weight_scale = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity")
+        all_weights, weight_scale = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=12)
         capacity_units = all_weights.pop()
         eligible_positions = [i for i, w in enumerate(all_weights) if w <= capacity_units]
         if not eligible_positions:
@@ -391,9 +391,9 @@ def solve_branch_and_bound(
                     "work_count": 0, "nodes_explored": 0, "nodes_pruned": 0}
         # Exact integer units make feasibility decisions exact. Fraction preserves
         # the fractional-knapsack relaxation exactly for mathematically safe pruning.
-        weight_units, weight_scale = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity")
+        weight_units, weight_scale = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=12)
         capacity_units = weight_units.pop()
-        value_units, value_scale = _scaled_ints([c.priority_score for c in crates], "Priority scores")
+        value_units, value_scale = _scaled_ints([c.priority_score for c in crates], "Priority scores", max_places=12)
         ordered_indices = sorted(range(len(crates)),
             key=lambda i: (-Fraction(value_units[i], weight_units[i]), i))
         weights = [weight_units[i] for i in ordered_indices]
@@ -494,7 +494,7 @@ def solve_brute_force(crates: list[Crate], capacity: float, max_items: int = 20)
             raise ValueError("Capacity must be finite and non-negative.")
         weights, _ = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity")
         capacity_units = weights.pop()
-        values, _ = _scaled_ints([c.priority_score for c in crates], "Priority scores")
+        values, _ = _scaled_ints([c.priority_score for c in crates], "Priority scores", max_places=12)
         best_value = best_weight = best_mask = 0
         operations = 0
         for mask in range(1 << n):
