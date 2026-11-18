@@ -535,57 +535,59 @@ int sanitize_manifest(
     return 0;
 }
 
-int write_clean_manifest_csv(const char *filepath, const ReliefCrate *crates, int count) {
-    if (!filepath || !crates) return -1;
+static void write_csv_field(FILE *file, const char *value) {
+    const unsigned char *p = (const unsigned char *)(value ? value : "");
+    fputc('"', file);
+    while (*p) {
+        if (*p == '"') fputc('"', file);
+        fputc(*p++, file);
+    }
+    fputc('"', file);
+}
 
+int write_clean_manifest_csv(const char *filepath, const ReliefCrate *crates, int count) {
+    if (!filepath || (!crates && count > 0) || count < 0) return -1;
     FILE *fout = fopen(filepath, "w");
     if (!fout) {
         fprintf(stderr, "[ERROR] Cannot create clean manifest file: %s\n", filepath);
         return -1;
     }
-
-    /* Standard CSV header */
     fprintf(fout, "crate_id,description,category,weight_kg,priority_score,density,arrival_timestamp,fragility_constraint,status\n");
-
     for (int i = 0; i < count; i++) {
-        fprintf(fout, "%s,\"%s\",%s,%.2f,%.2f,%.4f,%s,%d,%s\n",
-                crates[i].crate_id,
-                crates[i].description,
-                category_to_string(crates[i].category),
-                crates[i].weight_kg,
-                crates[i].priority_score,
-                crates[i].density,
-                crates[i].arrival_timestamp,
-                crates[i].fragility_constraint,
-                status_to_string(crates[i].status));
+        write_csv_field(fout, crates[i].crate_id);
+        fputc(',', fout);
+        write_csv_field(fout, crates[i].description);
+        fprintf(fout, ",%s,%.6f,%.6f,%.6f,",
+                category_to_string(crates[i].category), crates[i].weight_kg,
+                crates[i].priority_score, crates[i].density);
+        write_csv_field(fout, crates[i].arrival_timestamp);
+        fprintf(fout, ",%d,", crates[i].fragility_constraint);
+        write_csv_field(fout, status_to_string(crates[i].status));
+        fputc('\n', fout);
     }
-
-    fclose(fout);
+    if (fclose(fout) != 0) return -1;
     return 0;
 }
 
 int write_quarantine_log_csv(const char *filepath, const QuarantineRecord *records, int count) {
-    if (!filepath || !records) return -1;
-
+    if (!filepath || (!records && count > 0) || count < 0) return -1;
     FILE *fout = fopen(filepath, "w");
     if (!fout) {
         fprintf(stderr, "[ERROR] Cannot create quarantine log file: %s\n", filepath);
         return -1;
     }
-
-    /* Structured Audit Trail Header */
     fprintf(fout, "log_id,line_number,crate_id,rejection_reason,action_taken,raw_record\n");
-
     for (int i = 0; i < count; i++) {
-        fprintf(fout, "%d,%d,%s,\"%s\",\"%s\",\"%s\"\n",
-                i + 1,
-                records[i].line_number,
-                records[i].crate_id,
-                records[i].rejection_reason,
-                records[i].action_taken,
-                records[i].raw_record);
+        fprintf(fout, "%d,%d,", i + 1, records[i].line_number);
+        write_csv_field(fout, records[i].crate_id);
+        fputc(',', fout);
+        write_csv_field(fout, records[i].rejection_reason);
+        fputc(',', fout);
+        write_csv_field(fout, records[i].action_taken);
+        fputc(',', fout);
+        write_csv_field(fout, records[i].raw_record);
+        fputc('\n', fout);
     }
-
-    fclose(fout);
+    if (fclose(fout) != 0) return -1;
     return 0;
 }
