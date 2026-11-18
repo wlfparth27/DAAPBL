@@ -63,3 +63,18 @@ This separation avoids requiring a compiled shared library to launch the Streaml
 - Dashboard DP uses exact integer scaling for values with up to six decimal places. It refuses to run if the decision table exceeds 256 MiB or scaled total priority exceeds signed 64-bit range.
 - Dashboard Branch and Bound uses exact scaled integer weights/priorities and an exact rational fractional upper bound. If its node safety limit is reached, it reports the best feasible incumbent but marks optimality as unproven.
 - Reported peak memory is Python-traced allocation, not total operating-system RSS.
+
+
+## Verification
+
+Run the Python dashboard-engine regression suite after installing the dependencies:
+
+```bash
+python -m unittest test_dashboard_engine.py
+```
+
+Run the C sanitizer and baseline suites with a C compiler and GNU Make:
+
+```bash
+make test
+```
