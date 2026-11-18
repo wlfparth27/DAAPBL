@@ -1,0 +1,8 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+build/
+data/test_*_tmp.csv
+data/test_clean_out.csv
+data/test_quar_out.csv
