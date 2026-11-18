@@ -61,9 +61,9 @@ class ExactSolverRegressionTests(unittest.TestCase):
 
     def test_duplicate_timestamp_comparison_normalizes_utc_offsets(self):
         manifest = (
-            "crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status\\n"
-            "DUP,Older UTC instant,Medical,1.0,10.0,2026-11-18T08:00:00+02:00,0,READY\\n"
-            "DUP,Newer UTC instant,Medical,1.0,20.0,2026-11-18T06:30:00Z,0,READY\\n"
+            "crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status\n"
+            "DUP,Older UTC instant,Medical,1.0,10.0,2026-11-18T08:00:00+02:00,0,READY\n"
+            "DUP,Newer UTC instant,Medical,1.0,20.0,2026-11-18T06:30:00Z,0,READY\n"
         )
         accepted, _, report = parse_manifest(manifest)
         self.assertEqual(len(accepted), 1)
