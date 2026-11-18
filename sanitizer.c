@@ -408,6 +408,19 @@ int sanitize_manifest(
         /* Record passed initial syntax checks and is READY -> add to deduplication pool */
         if (pool_count < MAX_CRATES) {
             raw_valid_pool[pool_count++] = parsed_crate;
+        } else {
+            stats->quarantined_count++;
+            stats->schema_violation_count++;
+            if (quarantine_count < MAX_QUARANTINE_RECORDS) {
+                QuarantineRecord *qr = &quarantine_records[quarantine_count++];
+                memset(qr, 0, sizeof(*qr));
+                strncpy(qr->crate_id, parsed_crate.crate_id, MAX_ID_LEN - 1);
+                qr->line_number = line_number;
+                strncpy(qr->raw_record, line_buf, MAX_LINE_LEN - 1);
+                snprintf(qr->rejection_reason, MAX_REASON_LEN, "Sanitizer candidate limit (%d) exceeded", MAX_CRATES);
+                strncpy(qr->action_taken, "Rejected; not silently discarded", MAX_REASON_LEN - 1);
+                strncpy(qr->detected_timestamp, parsed_crate.arrival_timestamp, MAX_TIMESTAMP_LEN - 1);
+            }
         }
     }
 
@@ -432,6 +445,21 @@ int sanitize_manifest(
             /* Brand new unique crate_id */
             if (*clean_count < max_crates) {
                 clean_crates[(*clean_count)++] = *cand;
+            } else {
+                stats->quarantined_count++;
+                if (quarantine_count < MAX_QUARANTINE_RECORDS) {
+                    QuarantineRecord *qr = &quarantine_records[quarantine_count++];
+                    memset(qr, 0, sizeof(*qr));
+                    strncpy(qr->crate_id, cand->crate_id, MAX_ID_LEN - 1);
+                    qr->line_number = cand->line_number;
+                    snprintf(qr->raw_record, MAX_LINE_LEN, "%s,%s,%.2f,%.2f",
+                             cand->crate_id, category_to_string(cand->category),
+                             cand->weight_kg, cand->priority_score);
+                    snprintf(qr->rejection_reason, MAX_REASON_LEN,
+                             "Output buffer capacity (%d) exceeded", max_crates);
+                    strncpy(qr->action_taken, "Rejected; not silently discarded", MAX_REASON_LEN - 1);
+                    strncpy(qr->detected_timestamp, cand->arrival_timestamp, MAX_TIMESTAMP_LEN - 1);
+                }
             }
         } else {
             /* Duplicate crate_id encountered: compare arrival timestamps */
