@@ -1,5 +1,6 @@
 #include "sanitizer.h"
 #include <ctype.h>
+#include <math.h>
 
 /* Helper to strip leading and trailing whitespace/newlines/quotes */
 static void trim_whitespace(char *str) {
@@ -62,12 +63,12 @@ ValidationCode validate_crate_fields(const ReliefCrate *crate, char *reason_buf,
         return ERR_UNKNOWN_CATEGORY;
     }
 
-    if (crate->weight_kg <= 0.0) {
+    if (!isfinite(crate->weight_kg) || crate->weight_kg <= 0.0) {
         if (reason_buf) snprintf(reason_buf, buf_len, "Invalid non-positive weight (%.2f kg <= 0)", crate->weight_kg);
         return ERR_INVALID_WEIGHT;
     }
 
-    if (crate->priority_score <= 0.0) {
+    if (!isfinite(crate->priority_score) || crate->priority_score <= 0.0) {
         if (reason_buf) snprintf(reason_buf, buf_len, "Invalid non-positive priority score (%.2f <= 0)", crate->priority_score);
         return ERR_INVALID_PRIORITY;
     }
@@ -94,7 +95,9 @@ int parse_csv_line(const char *raw_line, int line_num, ReliefCrate *crate, char 
 
     /*
      * We support two standard layouts:
-     * 8-column layout:
+     * 9-column exported layout:
+     *   crate_id,description,category,weight_kg,priority_score,density,arrival_timestamp,fragility_constraint,status
+     * 8-column layout (without density):
      *   crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status
      * 7-column layout (without description):
      *   crate_id,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status
@@ -110,7 +113,18 @@ int parse_csv_line(const char *raw_line, int line_num, ReliefCrate *crate, char 
 
     int idx_id, idx_desc, idx_cat, idx_w, idx_v, idx_ts, idx_frag, idx_st;
 
-    if (token_count >= 8) {
+    if (token_count >= 9) {
+        /* Exported clean-manifest layout includes density before timestamp. */
+        idx_id = 0;
+        idx_desc = 1;
+        idx_cat = 2;
+        idx_w = 3;
+        idx_v = 4;
+        idx_ts = 6;
+        idx_frag = 7;
+        idx_st = 8;
+        strncpy(crate->description, tokens[idx_desc], MAX_DESC_LEN - 1);
+    } else if (token_count == 8) {
         idx_id = 0;
         idx_desc = 1;
         idx_cat = 2;
