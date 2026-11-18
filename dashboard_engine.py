@@ -490,38 +490,32 @@ def solve_brute_force(crates: list[Crate], capacity: float, max_items: int = 20)
         n = len(crates)
         if n > max_items:
             raise ValueError(f"Brute force is limited to {max_items} crates; this dataset has {n}.")
-        best_value = 0.0
-        best_weight = 0.0
-        best_mask = 0
+        if not math.isfinite(capacity) or capacity < 0:
+            raise ValueError("Capacity must be finite and non-negative.")
+        weights, _ = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity")
+        capacity_units = weights.pop()
+        values, _ = _scaled_ints([c.priority_score for c in crates], "Priority scores")
+        best_value = best_weight = best_mask = 0
         operations = 0
         for mask in range(1 << n):
             operations += 1
-            weight = 0.0
-            value = 0.0
-            for i, crate in enumerate(crates):
+            weight = value = 0
+            for i in range(n):
                 if (mask >> i) & 1:
-                    weight += crate.weight_kg
-                    value += crate.priority_score
-            if weight <= capacity + 1e-12 and value > best_value + 1e-10:
+                    weight += weights[i]
+                    value += values[i]
+            if weight <= capacity_units and value > best_value:
                 best_value, best_weight, best_mask = value, weight, mask
         selected = [i for i in range(n) if (best_mask >> i) & 1]
-        return {"selected_indices": selected, "total_weight": best_weight, "total_priority": best_value, "work_count": operations}
-    return _profile_call("Brute Force Oracle", run)
-
-
-def run_solver_suite(
-    crates: list[Crate], capacity: float,
-    selected: tuple[str, ...] = ("Branch and Bound", "Dynamic Programming", "Greedy Density"),
-    progress: Optional[Callable[[str, int, int, float, int], None]] = None,
-    max_nodes: int = 1_000_000,
-) -> list[SolverResult]:
-    results: list[SolverResult] = []
-    if "Branch and Bound" in selected:
-        cb = (lambda e, m, v, p: progress("Branch and Bound", e, m, v, p)) if progress else None
-        results.append(solve_branch_and_bound(crates, capacity, cb, max_nodes=max_nodes))
-    if "Dynamic Programming" in selected:
-        cb2 = (lambda e, m, ops: progress("Dynamic Programming", e, m, float(ops), 0)) if progress else None
-        results.append(solve_dynamic_programming(crates, capacity, cb2))
-    if "Greedy Density" in selected:
-        results.append(solve_greedy(crates, capacity))
-    return results
+        return {
+            "selected_indices": selected,
+            "total_weight": sum(crates[i].weight_kg for i in selected),
+            "total_priority": sum(crates[i].priority_score for i in selected),
+            "work_count": operations,
+        }
+    try:
+        return _profile_call("Brute Force Oracle", run)
+    except ValueError as exc:
+        return SolverResult(algorithm="Brute Force Oracle", selected_indices=[], total_weight=0.0,
+            total_priority=0.0, runtime_seconds=0.0, peak_traced_mb=0.0, work_count=0,
+            optimal=False, status=f"Not run: {exc}")
