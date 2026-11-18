@@ -281,7 +281,7 @@ def solve_greedy(crates: list[Crate], capacity: float) -> SolverResult:
     def run() -> dict:
         if not math.isfinite(capacity) or capacity < 0:
             raise ValueError("Capacity must be finite and non-negative.")
-        weights, _ = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=12)
+        weights, _ = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=15)
         capacity_units = weights.pop()
         ordered = sorted(enumerate(crates), key=lambda pair: (
             -(pair[1].priority_score / pair[1].weight_kg),
@@ -391,9 +391,9 @@ def solve_branch_and_bound(
                     "work_count": 0, "nodes_explored": 0, "nodes_pruned": 0}
         # Exact integer units make feasibility decisions exact. Fraction preserves
         # the fractional-knapsack relaxation exactly for mathematically safe pruning.
-        weight_units, weight_scale = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=12)
+        weight_units, weight_scale = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=15)
         capacity_units = weight_units.pop()
-        value_units, value_scale = _scaled_ints([c.priority_score for c in crates], "Priority scores", max_places=12)
+        value_units, value_scale = _scaled_ints([c.priority_score for c in crates], "Priority scores", max_places=15)
         ordered_indices = sorted(range(len(crates)),
             key=lambda i: (-Fraction(value_units[i], weight_units[i]), i))
         weights = [weight_units[i] for i in ordered_indices]
@@ -492,9 +492,9 @@ def solve_brute_force(crates: list[Crate], capacity: float, max_items: int = 20)
             raise ValueError(f"Brute force is limited to {max_items} crates; this dataset has {n}.")
         if not math.isfinite(capacity) or capacity < 0:
             raise ValueError("Capacity must be finite and non-negative.")
-        weights, _ = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=12)
+        weights, _ = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=15)
         capacity_units = weights.pop()
-        values, _ = _scaled_ints([c.priority_score for c in crates], "Priority scores", max_places=12)
+        values, _ = _scaled_ints([c.priority_score for c in crates], "Priority scores", max_places=15)
         best_value = best_weight = best_mask = 0
         operations = 0
         for mask in range(1 << n):
