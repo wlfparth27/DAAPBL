@@ -82,11 +82,12 @@ void test_dirty_manifest_sanitization(void) {
 
     /* Check that clean output file was created and is non-empty */
     FILE *fclean = fopen(clean_path, "r");
-    TEST_ASSERT(fclean != NULL, "Clean output CSV file successfully written");
+    int clean_file_written = (fclean != NULL);
+    TEST_ASSERT(clean_file_written, "Clean output CSV file successfully written");
     if (fclean) fclose(fclean);
 
     /* The sanitizer's own nine-column clean export must be valid input again. */
-    if (fclean) {
+    if (clean_file_written) {
         ReliefCrate roundtrip[64];
         int roundtrip_count = 0;
         ManifestStats roundtrip_stats;
@@ -249,6 +250,23 @@ void test_edge_case_5_greedy_trap(void) {
     remove(trap_path);
 }
 
+/* Regression: NaN and infinity must not pass numeric validation. */
+void test_non_finite_numeric_values(void) {
+    printf("\n=== Running Test Suite 9: Non-finite Numeric Rejection ===\n");
+    ReliefCrate crate;
+    char error[128] = {0};
+    int weight_result = parse_csv_line(
+        "CR-NAN,Invalid Weight,Medical,nan,10.0,2026-11-18T00:00:00Z,0,READY",
+        2, &crate, error, sizeof(error));
+    TEST_ASSERT(weight_result == ERR_INVALID_WEIGHT, "NaN weight rejected");
+
+    memset(error, 0, sizeof(error));
+    int priority_result = parse_csv_line(
+        "CR-INF,Invalid Priority,Medical,1.0,inf,2026-11-18T00:00:00Z,0,READY",
+        3, &crate, error, sizeof(error));
+    TEST_ASSERT(priority_result == ERR_INVALID_PRIORITY, "Infinite priority rejected");
+}
+
 int main(void) {
     if (MAKE_TEST_DIR("data") != 0) {
         /* An existing directory is fine; verify that it is writable. */
@@ -273,6 +291,7 @@ int main(void) {
     test_edge_case_3_density_ties();
     test_edge_case_4_trivial_fit();
     test_edge_case_5_greedy_trap();
+    test_non_finite_numeric_values();
 
     printf("\n------------------------------------------------------------------------\n");
     printf("TEST RUN COMPLETE: %d Passed, %d Failed.\n", g_tests_passed, g_tests_failed);
