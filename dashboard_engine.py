@@ -17,6 +17,7 @@ import time
 import tracemalloc
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from datetime import datetime, timezone
 from typing import Callable, Iterable, Optional
 
 import numpy as np
@@ -86,6 +87,17 @@ def _safe_float(value: str) -> Optional[float]:
         return None
     return number if math.isfinite(number) else None
 
+
+
+def _timestamp_key(value: str) -> Optional[datetime]:
+    """Return a UTC-normalized timestamp for duplicate precedence."""
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 def parse_manifest(csv_text: str) -> tuple[list[Crate], list[dict], HygieneReport]:
     """Parse, validate and deduplicate a repository-style CSV manifest.
@@ -209,7 +221,14 @@ def parse_manifest(csv_text: str) -> tuple[list[Crate], list[dict], HygieneRepor
                 report.duplicates_resolved += 1
                 # ISO-8601 sortable timestamps; on a tie retain the earlier row,
                 # as the repository sanitizer does (replace only if newer).
-                if crate.arrival_timestamp > previous.arrival_timestamp:
+                candidate_time = _timestamp_key(crate.arrival_timestamp)
+                previous_time = _timestamp_key(previous.arrival_timestamp)
+                is_newer = (
+                    candidate_time > previous_time
+                    if candidate_time is not None and previous_time is not None
+                    else crate.arrival_timestamp > previous.arrival_timestamp
+                )
+                if is_newer:
                     reject(
                         previous.line_number, previous.crate_id,
                         f"Duplicate crate_id superseded by newer record ({crate.arrival_timestamp} > {previous.arrival_timestamp})",
