@@ -22,28 +22,31 @@ static void trim_whitespace(char *str) {
 /* Helper to split CSV line into tokens safely (handling empty fields) */
 static int split_csv_line(char *line, char tokens[][MAX_LINE_LEN], int max_tokens) {
     int count = 0;
-    char *cur = line;
-    char *start = cur;
-
-    while (*cur && count < max_tokens) {
-        if (*cur == ',') {
-            *cur = '\0';
-            strncpy(tokens[count], start, MAX_LINE_LEN - 1);
-            tokens[count][MAX_LINE_LEN - 1] = '\0';
-            trim_whitespace(tokens[count]);
-            count++;
-            start = cur + 1;
+    char *src = line;
+    while (*src && count < max_tokens) {
+        char *dst = tokens[count];
+        int in_quotes = 0;
+        while (*src) {
+            if (*src == '"') {
+                if (in_quotes && src[1] == '"') {
+                    if ((size_t)(dst - tokens[count]) < MAX_LINE_LEN - 1) *dst++ = '"';
+                    src += 2;
+                    continue;
+                }
+                in_quotes = !in_quotes;
+                src++;
+                continue;
+            }
+            if (*src == ',' && !in_quotes) break;
+            if ((size_t)(dst - tokens[count]) < MAX_LINE_LEN - 1) *dst++ = *src;
+            src++;
         }
-        cur++;
-    }
-
-    if (count < max_tokens) {
-        strncpy(tokens[count], start, MAX_LINE_LEN - 1);
-        tokens[count][MAX_LINE_LEN - 1] = '\0';
+        *dst = '\0';
         trim_whitespace(tokens[count]);
         count++;
+        if (*src == ',') src++;
+        else break;
     }
-
     return count;
 }
 
