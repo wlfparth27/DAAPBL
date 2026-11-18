@@ -320,7 +320,7 @@ def solve_dynamic_programming(
             raise ValueError("Capacity must be finite and non-negative.")
         if not crates or capacity == 0:
             return {"selected_indices": [], "total_weight": 0.0, "total_priority": 0.0, "work_count": 0}
-        all_weights, weight_scale = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=12)
+        all_weights, weight_scale = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity")
         capacity_units = all_weights.pop()
         eligible_positions = [i for i, w in enumerate(all_weights) if w <= capacity_units]
         if not eligible_positions:
@@ -492,7 +492,7 @@ def solve_brute_force(crates: list[Crate], capacity: float, max_items: int = 20)
             raise ValueError(f"Brute force is limited to {max_items} crates; this dataset has {n}.")
         if not math.isfinite(capacity) or capacity < 0:
             raise ValueError("Capacity must be finite and non-negative.")
-        weights, _ = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity")
+        weights, _ = _scaled_ints([c.weight_kg for c in crates] + [capacity], "Weights/capacity", max_places=12)
         capacity_units = weights.pop()
         values, _ = _scaled_ints([c.priority_score for c in crates], "Priority scores", max_places=12)
         best_value = best_weight = best_mask = 0
