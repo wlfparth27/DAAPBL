@@ -2,6 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#ifdef _WIN32
+#include <direct.h>
+#define MAKE_TEST_DIR(path) _mkdir(path)
+#else
+#include <sys/stat.h>
+#define MAKE_TEST_DIR(path) mkdir(path, 0777)
+#endif
 #include "relief_schema.h"
 #include "sanitizer.h"
 #include "dataset_generator.h"
@@ -93,6 +100,10 @@ void test_deduplication_timestamp_rule(void) {
     printf("\n=== Running Test Suite 3: Deduplication (Latest Timestamp Invariant) ===\n");
     const char *dedup_path = "data/test_dedup_tmp.csv";
     FILE *fp = fopen(dedup_path, "w");
+    if (!fp) {
+        TEST_ASSERT(0, "Could not create deduplication test fixture");
+        return;
+    }
     fprintf(fp, "crate_id,description,category,weight_kg,priority_score,arrival_timestamp,fragility_constraint,status\n");
     /* Earlier record: priority 50.0 */
     fprintf(fp, "CR-DEDUP-01,\"Draft Kit\",Medical,10.0,50.0,2026-11-16T08:00:00Z,1,READY\n");
@@ -228,6 +239,16 @@ void test_edge_case_5_greedy_trap(void) {
 }
 
 int main(void) {
+    if (MAKE_TEST_DIR("data") != 0) {
+        /* An existing directory is fine; verify that it is writable. */
+        FILE *probe = fopen("data/.write_probe", "w");
+        if (!probe) {
+            fprintf(stderr, "Unable to create or access the data/ test directory.\n");
+            return 2;
+        }
+        fclose(probe);
+        remove("data/.write_probe");
+    }
     printf("========================================================================\n");
     printf(" PROJECT #29: NON-FRACTIONAL RELIEF PACKING\n");
     printf(" MEMBER 3 (BHAVYA) - DATASET HYGIENE & EDGE-CASE TEST SUITE\n");
