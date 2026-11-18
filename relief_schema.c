@@ -65,28 +65,49 @@ const char* validation_code_to_string(ValidationCode code) {
 }
 
 /* Compare two ISO-8601 timestamps (YYYY-MM-DDTHH:MM:SS) */
+static long long civil_days(int year, unsigned month, unsigned day) {
+    year -= month <= 2;
+    int era = (year >= 0 ? year : year - 399) / 400;
+    unsigned year_of_era = (unsigned)(year - era * 400);
+    unsigned adjusted_month = month > 2 ? month - 3 : month + 9;
+    unsigned day_of_year = (153 * adjusted_month + 2) / 5 + day - 1;
+    unsigned day_of_era = year_of_era * 365 + year_of_era / 4 -
+                          year_of_era / 100 + day_of_year;
+    return (long long)era * 146097 + (long long)day_of_era;
+}
+
 int compare_iso_timestamps(const char *ts1, const char *ts2) {
     if (!ts1 && !ts2) return 0;
     if (!ts1) return -1;
     if (!ts2) return 1;
 
-    int y1 = 0, m1 = 0, d1 = 0, h1 = 0, min1 = 0, s1 = 0;
-    int y2 = 0, m2 = 0, d2 = 0, h2 = 0, min2 = 0, s2 = 0;
-
-    int matched1 = sscanf(ts1, "%d-%d-%d%*c%d:%d:%d", &y1, &m1, &d1, &h1, &min1, &s1);
-    int matched2 = sscanf(ts2, "%d-%d-%d%*c%d:%d:%d", &y2, &m2, &d2, &h2, &min2, &s2);
-
-    if (matched1 >= 3 && matched2 >= 3) {
-        if (y1 != y2) return y1 - y2;
-        if (m1 != m2) return m1 - m2;
-        if (d1 != d2) return d1 - d2;
-        if (h1 != h2) return h1 - h2;
-        if (min1 != min2) return min1 - min2;
-        if (s1 != s2) return s1 - s2;
+    int y1, m1, d1, h1, min1, y2, m2, d2, h2, min2;
+    double sec1, sec2;
+    char zone1[16] = {0}, zone2[16] = {0};
+    int n1 = sscanf(ts1, "%d-%d-%dT%d:%d:%lf%15s",
+                    &y1, &m1, &d1, &h1, &min1, &sec1, zone1);
+    int n2 = sscanf(ts2, "%d-%d-%dT%d:%d:%lf%15s",
+                    &y2, &m2, &d2, &h2, &min2, &sec2, zone2);
+    if (n1 >= 6 && n2 >= 6) {
+        int offset1 = 0, offset2 = 0;
+        int oh = 0, om = 0;
+        if (zone1[0] == '+' || zone1[0] == '-') {
+            if (sscanf(zone1 + 1, "%d:%d", &oh, &om) != 2) return strcmp(ts1, ts2);
+            offset1 = (oh * 60 + om) * 60 * (zone1[0] == '+' ? 1 : -1);
+        }
+        oh = om = 0;
+        if (zone2[0] == '+' || zone2[0] == '-') {
+            if (sscanf(zone2 + 1, "%d:%d", &oh, &om) != 2) return strcmp(ts1, ts2);
+            offset2 = (oh * 60 + om) * 60 * (zone2[0] == '+' ? 1 : -1);
+        }
+        double utc1 = (double)civil_days(y1, (unsigned)m1, (unsigned)d1) * 86400.0 +
+                      h1 * 3600.0 + min1 * 60.0 + sec1 - offset1;
+        double utc2 = (double)civil_days(y2, (unsigned)m2, (unsigned)d2) * 86400.0 +
+                      h2 * 3600.0 + min2 * 60.0 + sec2 - offset2;
+        if (utc1 < utc2) return -1;
+        if (utc1 > utc2) return 1;
         return 0;
     }
-
-    /* Fallback to lexicographical comparison */
     return strcmp(ts1, ts2);
 }
 
