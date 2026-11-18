@@ -333,9 +333,9 @@ def solve_dynamic_programming(
         effective_capacity = min(capacity_units, sum(weights))
         width = effective_capacity + 1
         choice_row_bytes = (width + 7) // 8
-        required_bytes = len(eligible_crates) * choice_row_bytes + width * 16
+        required_bytes = len(eligible_crates) * choice_row_bytes + width * 40
         if required_bytes > memory_limit_mb * 1024 * 1024:
-            raise MemoryError(f"DP decision table needs approximately {required_bytes / (1024*1024):.1f} MB; "
+            raise MemoryError(f"DP table and working arrays need approximately {required_bytes / (1024*1024):.1f} MB; "
                               f"the dashboard safety limit is {memory_limit_mb} MB.")
         dp_value = np.zeros(width, dtype=np.int64)
         dp_weight = np.zeros(width, dtype=np.int64)
