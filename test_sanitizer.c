@@ -255,6 +255,13 @@ void test_non_finite_numeric_values(void) {
     printf("\n=== Running Test Suite 9: Non-finite Numeric Rejection ===\n");
     ReliefCrate crate;
     char error[128] = {0};
+    int quoted_result = parse_csv_line(
+        "CR-COMMA,\\"Kit, with \\"\\"quotes\\"\\",Medical,1.0,2.0,2026-11-18T00:00:00Z,0,READY",
+        2, &crate, error, sizeof(error));
+    TEST_ASSERT(quoted_result == VALID_OK, "Quoted commas and escaped quotes parsed");
+    TEST_ASSERT(strcmp(crate.description, "Kit, with \\"quotes\\"") == 0,
+                 "Quoted description preserved after CSV decoding");
+    memset(error, 0, sizeof(error));
     int weight_result = parse_csv_line(
         "CR-NAN,Invalid Weight,Medical,nan,10.0,2026-11-18T00:00:00Z,0,READY",
         2, &crate, error, sizeof(error));
