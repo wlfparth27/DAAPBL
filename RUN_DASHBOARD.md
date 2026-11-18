@@ -9,34 +9,34 @@
 
 From the repository root:
 
-\`\`\`bash
+```bash
 python -m venv .venv
-\`\`\`
+```
 
 Activate the environment:
 
-\`\`\`powershell
+```powershell
 # Windows PowerShell
 .venv\Scripts\Activate.ps1
-\`\`\`
+```
 
-\`\`\`bash
+```bash
 # macOS/Linux
 source .venv/bin/activate
-\`\`\`
+```
 
 Install dependencies and launch Streamlit:
 
-\`\`\`bash
+```bash
 python -m pip install -r requirements-dashboard.txt
 python -m streamlit run dashboard.py
-\`\`\`
+```
 
-Streamlit prints the local URL, normally \`http://localhost:8501\`.
+Streamlit prints the local URL, normally `http://localhost:8501`.
 
 ## Datasets and uploads
 
-The sidebar discovers the curated CSV manifests in the repository root, including the small, medium, large, dirty, and edge-case datasets. You can also upload a CSV. Required headers are \`crate_id\`, \`weight_kg\`, and \`priority_score\`. Optional fields include \`category\`, \`description\`, \`arrival_timestamp\`, \`fragility_constraint\`, and \`status\`. When category is supplied, supported values are Medical, Water, Food, and Shelter. Only READY records are eligible.
+The sidebar discovers the curated CSV manifests in the repository root, including the small, medium, large, dirty, and edge-case datasets. You can also upload a CSV. Required headers are `crate_id`, `weight_kg`, and `priority_score`. Optional fields include `category`, `description`, `arrival_timestamp`, `fragility_constraint`, and `status`. When category is supplied, supported values are Medical, Water, Food, and Shelter. Only READY records are eligible.
 
 ## Dashboard features
 
@@ -50,11 +50,11 @@ The sidebar discovers the curated CSV manifests in the repository root, includin
 
 ## Important architecture distinction
 
-The dashboard executes Python adapters in \`dashboard_engine.py\`. It does **not** invoke the C solvers. The standalone \`DAA_PBL.c\` is an interactive console implementation. The C DP and Greedy baseline APIs are in \`baselines/\` and can be tested independently:
+The dashboard executes Python adapters in `dashboard_engine.py`. It does **not** invoke the C solvers. The standalone `DAA_PBL.c` is an interactive console implementation. The C DP and Greedy baseline APIs are in `baselines/` and can be tested independently:
 
-\`\`\`bash
+```bash
 make -C baselines test
-\`\`\`
+```
 
 This separation avoids requiring a compiled shared library to launch the Streamlit application on Windows.
 
